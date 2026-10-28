@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using TaskIsland.Application;
@@ -19,12 +18,19 @@ public partial class IslandWindow : Window
     private readonly DispatcherTimer enterTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     private readonly DispatcherTimer leaveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private HwndSource? source;
+    private readonly IslandMotion motion;
 
     public IslandWindow(NotificationService notifications)
     {
         InitializeComponent();
+        motion = new IslandMotion(this, IslandSurface, IslandClip, HeaderOffset, ContentPanel, ContentOffset, PositionWindow);
         this.notifications = notifications;
         DataContext = model;
+        model.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(IslandViewModel.AnimationsEnabled) && new WindowInteropHelper(this).Handle != 0)
+                RenderState();
+        };
         if (notifications.Error is not null) model.Status = notifications.Error;
         enterTimer.Tick += (_, _) => { enterTimer.Stop(); if (IsMouseOver && state.Page == IslandPage.Collapsed) OpenTasks(false); };
         leaveTimer.Tick += (_, _) => { leaveTimer.Stop(); if (!IsMouseOver) { state.CollapseAfterPointerLeave(); RenderState(); } };
@@ -42,7 +48,7 @@ public partial class IslandWindow : Window
             enterTimer.Stop(); leaveTimer.Stop(); source?.RemoveHook(WindowMessages);
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
-            System.Windows.Application.Current.Shutdown();
+            System.Windows.Application.Current?.Shutdown();
         };
 #if DEBUG
         var testButton = new Button { Content = "发送测试通知 · Debug" };
@@ -83,25 +89,16 @@ public partial class IslandWindow : Window
     private void RenderState()
     {
         var expanded = state.Page != IslandPage.Collapsed;
-        ContentPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
         BackButton.Visibility = state.Page is IslandPage.Settings or IslandPage.Archive ? Visibility.Visible : Visibility.Collapsed;
-        TasksPanel.Visibility = state.Page == IslandPage.Tasks ? Visibility.Visible : Visibility.Collapsed;
-        SettingsPanel.Visibility = state.Page == IslandPage.Settings ? Visibility.Visible : Visibility.Collapsed;
-        ArchivePanel.Visibility = state.Page == IslandPage.Archive ? Visibility.Visible : Visibility.Collapsed;
+        // Keep the outgoing page arranged until its parent has faded and the shape has closed.
+        if (expanded)
+        {
+            TasksPanel.Visibility = state.Page == IslandPage.Tasks ? Visibility.Visible : Visibility.Collapsed;
+            SettingsPanel.Visibility = state.Page == IslandPage.Settings ? Visibility.Visible : Visibility.Collapsed;
+            ArchivePanel.Visibility = state.Page == IslandPage.Archive ? Visibility.Visible : Visibility.Collapsed;
+        }
         var area = DesktopPlacement.PrimaryWorkAreaInDips(new WindowInteropHelper(this).Handle);
-        var bounds = IslandPlacement.Calculate(area, expanded ? 360 : 240, expanded ? 295 : 40, model.Anchor);
-        Animate(WidthProperty, bounds.Width);
-        Animate(HeightProperty, bounds.Height);
-    }
-
-    private void Animate(DependencyProperty property, double target)
-    {
-        var current = (double)GetValue(property);
-        BeginAnimation(property, null);
-        SetValue(property, target);
-        if (model.AnimationsEnabled && SystemParameters.ClientAreaAnimation && Math.Abs(current - target) > 0.1)
-            BeginAnimation(property, new DoubleAnimation(current, target, TimeSpan.FromMilliseconds(220))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } }, HandoffBehavior.SnapshotAndReplace);
+        motion.Transition(expanded, model.AnimationsEnabled && SystemParameters.ClientAreaAnimation, area, model.Anchor);
     }
 
     private void PositionWindow()
@@ -116,10 +113,17 @@ public partial class IslandWindow : Window
     private nint WindowMessages(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
         if (message is 0x02E0 or 0x001A or 0x007E) Dispatcher.BeginInvoke(PositionWindow);
+        if (message == 0x0084) // Alpha-zero layered pixels handle cross-process margins; this assists same-thread hit testing.
+        {
+            var packed = lParam.ToInt64();
+            var point = PointFromScreen(new Point((short)(packed & 0xFFFF), (short)((packed >> 16) & 0xFFFF)));
+            if (!motion.Contains(point)) { handled = true; return -1; } // HTTRANSPARENT
+        }
         // Hover-expanded windows should not become active merely when Windows asks about mouse activation.
         if (message == 0x0021) { handled = true; return 3; } // MA_NOACTIVATE; buttons explicitly activate on click.
         return 0;
     }
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(PositionWindow);
-    private void OnSystemParametersChanged(object? sender, PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(PositionWindow);
+    private void OnSystemParametersChanged(object? sender, PropertyChangedEventArgs e)
+        => Dispatcher.BeginInvoke(e.PropertyName == nameof(SystemParameters.ClientAreaAnimation) ? RenderState : PositionWindow);
 }
