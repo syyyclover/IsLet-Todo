@@ -102,5 +102,7 @@
 
 - 已完整阅读需求基线；目录初始只有 `IsLet_Todo.md`，未发现现有应用工程。
 - Git SSH 远程查询已成功，初次查询没有返回 refs，远程尚无分支。
-- 本地已初始化 `main`，`origin` 指向 `git@github.com:syyyclover/IsLet-Todo.git`；首次提交和远程同步待验证。
+- 本地已初始化 `main`，`origin` 指向 `git@github.com:syyyclover/IsLet-Todo.git`；首次文档提交为 `595a5f9`。
+- Markdown 本地链接检查和 `git diff --cached --check` 已通过；原始需求文档未修改，保留其 Markdown 双空格换行。
+- `git push -u origin main` 两次未能启动：自动权限审批超时。尚未推送或建立上游跟踪，M0 的同步项保持未完成；需获准执行推送后核对远程提交。
 - 应用构建、自动化测试、Windows 人工验收及性能测量：未执行，尚无应用实现。
