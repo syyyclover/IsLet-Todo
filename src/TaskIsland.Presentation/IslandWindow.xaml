@@ -1,7 +1,7 @@
 <Window x:Class="TaskIsland.Presentation.IslandWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  Title="IsLet-Todo" Width="360" Height="295" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False" ShowActivated="False" Topmost="True" WindowStartupLocation="Manual"
- MouseEnter="OnPointerEnter" MouseLeave="OnPointerLeave" PreviewKeyDown="OnKeyDown" UseLayoutRounding="True">
- <Window.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility"/></Window.Resources>
+ MouseEnter="OnPointerEnter" MouseLeave="OnPointerLeave" PreviewKeyDown="OnKeyDown" UseLayoutRounding="True" FontFamily="Segoe UI, Microsoft YaHei UI">
+ <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/IslandTheme.xaml"/></ResourceDictionary.MergedDictionaries><BooleanToVisibilityConverter x:Key="BoolVisibility"/></ResourceDictionary></Window.Resources>
  <Canvas>
  <Border x:Name="IslandSurface" Width="360" Height="295" Background="#F51A1C24" BorderBrush="#393D49" BorderThickness="1" CornerRadius="20">
   <Border.Clip><RectangleGeometry x:Name="IslandClip" Rect="60,0,240,40" RadiusX="20" RadiusY="20"/></Border.Clip>
@@ -16,23 +16,27 @@
    <StackPanel x:Name="ContentPanel" Canvas.Left="12" Canvas.Top="45" Width="334" Visibility="Hidden" Opacity="0">
     <StackPanel.RenderTransform><TranslateTransform x:Name="ContentOffset" Y="8"/></StackPanel.RenderTransform>
     <StackPanel x:Name="TasksPanel">
-     <DockPanel Margin="0,0,0,4"><Button Content="＋ 添加日程" Command="{Binding AddCommand}" DockPanel.Dock="Right" Padding="9,5"/><Button Content="设置" Click="OnSettings" DockPanel.Dock="Right" Padding="7,5"/><Button Content="归档" Click="OnArchive" DockPanel.Dock="Right" Padding="7,5"/><TextBlock Text="日程" Foreground="#F3F4F7" VerticalAlignment="Center" Margin="5,0"/></DockPanel>
-     <ListBox x:Name="ActiveList" ItemsSource="{Binding Tasks}" Height="154" Background="Transparent" BorderThickness="0" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" HorizontalContentAlignment="Stretch">
-      <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style></ListBox.ItemContainerStyle>
+     <DockPanel Margin="0,0,0,4"><Button Content="设置" Style="{StaticResource QuietButton}" Click="OnSettings" DockPanel.Dock="Right"/><Button Content="归档" Style="{StaticResource QuietButton}" Click="OnArchive" DockPanel.Dock="Right"/><TextBlock Text="我的日程" Foreground="#F3F4F7" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="5,0"/></DockPanel>
+     <Button x:Name="AddTaskButton" Content="＋  添加日程" AutomationProperties.Name="添加日程" Style="{StaticResource PrimaryButton}" Command="{Binding AddCommand}" Height="34" Margin="3,0,3,8"/>
+     <Grid Height="114">
+      <StackPanel x:Name="EmptyTasksPanel" VerticalAlignment="Center" IsHitTestVisible="False"><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Tasks.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style><TextBlock Text="从一条小事开始" Foreground="#D6DCE5" FontSize="13" HorizontalAlignment="Center"/><TextBlock Text="点击上方按钮，记下接下来要做的事" Foreground="#939CAD" FontSize="11" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
+     <ListBox x:Name="ActiveList" ItemsSource="{Binding Tasks}" Height="114" Background="Transparent" BorderThickness="0" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" HorizontalContentAlignment="Stretch">
+
       <ListBox.ItemTemplate><DataTemplate>
        <Grid Height="46" MouseRightButtonUp="OnTaskRightClick">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <StackPanel Margin="4,4"><TextBlock Text="{Binding Title}" Foreground="#F3F4F7" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}"/><TextBlock Text="{Binding Detail}" Foreground="#939CAD" FontSize="10" TextTrimming="CharacterEllipsis"/></StackPanel>
+        <StackPanel Margin="8,6"><TextBlock Text="{Binding Title}" Foreground="#F3F4F7" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}"/><TextBlock Text="{Binding Detail}" Foreground="#939CAD" FontSize="10" TextTrimming="CharacterEllipsis"/></StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-         <Button Content="✎" Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="5,4" Margin="1" ToolTip="编辑" AutomationProperties.Name="编辑日程"/>
-         <Button Content="✓" Command="{Binding DataContext.CompleteCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="5,4" Margin="1" ToolTip="标记完成" AutomationProperties.Name="标记完成"/>
-         <Button Content="↓" Command="{Binding DataContext.ArchiveCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="5,4" Margin="1" ToolTip="归档" AutomationProperties.Name="归档日程"/>
-         <Button Content="⌛" Command="{Binding DataContext.RenewCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="4,4" Margin="1" ToolTip="{Binding ArchiveTooltip}" AutomationProperties.Name="延长保留时间"/>
-         <Button Content="{Binding PinGlyph}" Command="{Binding DataContext.PinCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="5,4" Margin="1" ToolTip="{Binding PinTooltip}" AutomationProperties.Name="置顶或取消置顶"/>
+         <Button Style="{StaticResource IconButton}" Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="编辑" AutomationProperties.Name="编辑日程"><Path Style="{StaticResource TaskIcon}" Data="{StaticResource EditIcon}"/></Button>
+         <Button Style="{StaticResource IconButton}" Command="{Binding DataContext.CompleteCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="标记完成" AutomationProperties.Name="标记完成"><Path Style="{StaticResource TaskIcon}" Data="{StaticResource CompleteIcon}"/></Button>
+         <Button Style="{StaticResource IconButton}" Command="{Binding DataContext.ArchiveCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="归档" AutomationProperties.Name="归档日程"><Path Style="{StaticResource TaskIcon}" Data="{StaticResource ArchiveIcon}"/></Button>
+         <Button Style="{StaticResource IconButton}" Command="{Binding DataContext.RenewCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="{Binding ArchiveTooltip}" AutomationProperties.Name="延长保留时间"><Path Style="{StaticResource TaskIcon}" Data="{StaticResource HourglassIcon}"/></Button>
+         <Button Style="{StaticResource IconButton}" Command="{Binding DataContext.PinCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="{Binding PinTooltip}" AutomationProperties.Name="置顶或取消置顶"><Path Data="{StaticResource PinIcon}"><Path.Style><Style TargetType="Path" BasedOn="{StaticResource TaskIcon}"><Style.Triggers><DataTrigger Binding="{Binding IsPinned}" Value="True"><Setter Property="Stroke" Value="{StaticResource IslandAccent}"/></DataTrigger></Style.Triggers></Style></Path.Style></Path></Button>
         </StackPanel>
        </Grid>
       </DataTemplate></ListBox.ItemTemplate>
      </ListBox>
+     </Grid>
     </StackPanel>
     <StackPanel x:Name="SettingsPanel" Visibility="Collapsed">
      <TextBlock Text="岛的位置" Foreground="#F3F4F7" Margin="5,5"/>
@@ -49,10 +53,10 @@
     </StackPanel>
     <StackPanel x:Name="EditorPanel" Visibility="Collapsed">
      <TextBlock Text="日程内容" Foreground="#F3F4F7" Margin="5,4"/>
-     <TextBox x:Name="TitleInput" Text="{Binding EditorTitle, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsBusy}" Height="36" Padding="8" Margin="3,4" Background="#303440" Foreground="#F3F4F7" BorderBrush="#535D73" AcceptsReturn="False" VerticalContentAlignment="Center" AutomationProperties.Name="日程内容"/>
+     <TextBox x:Name="TitleInput" Text="{Binding EditorTitle, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsBusy}" Height="40" Margin="3,4" AcceptsReturn="False" VerticalContentAlignment="Center" AutomationProperties.Name="日程内容"/>
      <TextBlock Text="{Binding EditorTimeDescription}" Foreground="#A8AEBC" FontSize="11" Margin="5,6"/>
-     <StackPanel Orientation="Horizontal"><Button Content="保存" Command="{Binding SaveCommand}" IsDefault="True"/><Button Content="取消" Command="{Binding CancelEditCommand}"/></StackPanel>
-     <StackPanel Visibility="{Binding ConfirmDiscard, Converter={StaticResource BoolVisibility}}"><TextBlock Text="内容尚未保存" Foreground="#E9C88C" Margin="5,5"/><StackPanel Orientation="Horizontal"><Button Content="继续编辑" Command="{Binding KeepEditingCommand}"/><Button Content="放弃修改" Command="{Binding DiscardChangesCommand}"/></StackPanel></StackPanel>
+     <StackPanel Orientation="Horizontal"><Button Style="{StaticResource PrimaryButton}" Content="保存日程" Command="{Binding SaveCommand}" IsDefault="True"/><Button Style="{StaticResource QuietButton}" Content="取消" Command="{Binding CancelEditCommand}"/></StackPanel>
+     <StackPanel Visibility="{Binding ConfirmDiscard, Converter={StaticResource BoolVisibility}}"><TextBlock Text="内容尚未保存" Foreground="#E9C88C" Margin="5,5"/><StackPanel Orientation="Horizontal"><Button Style="{StaticResource PrimaryButton}" Content="继续编辑" Command="{Binding KeepEditingCommand}"/><Button Content="放弃修改" Command="{Binding DiscardChangesCommand}"/></StackPanel></StackPanel>
     </StackPanel>
     <TextBlock Text="{Binding Status}" FontSize="11" Margin="5,10,5,0" TextWrapping="Wrap"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#A6D9B5"/><Style.Triggers><DataTrigger Binding="{Binding IsError}" Value="True"><Setter Property="Foreground" Value="#F2A5A5"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
    </StackPanel>

@@ -23,7 +23,8 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string FeaturedTitle { get; set; } = "暂无日程";
     [ObservableProperty] public partial bool ConfirmDiscard { get; set; }
     [ObservableProperty] public partial bool IsError { get; set; }
-    [ObservableProperty] public partial bool IsBusy { get; set; }
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(AddCommand))] public partial bool IsBusy { get; set; }
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(AddCommand))] public partial bool IsReady { get; set; }
     [ObservableProperty] public partial bool HasMoreArchives { get; set; }
     [ObservableProperty] public partial string EditorTimeDescription { get; set; } = "未设置结束时间";
     public ObservableCollection<TaskRowViewModel> Tasks { get; } = [];
@@ -33,6 +34,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         if (service is not null) service.Changed -= OnChanged;
         service = taskService; service.Changed += OnChanged;
         await ReloadAsync();
+        IsReady = !IsError;
         if (!IsError) Status = Tasks.Count == 0 ? "添加第一条日程吧" : $"{Tasks.Count} 条活跃日程";
     }
     public async Task ReloadAsync()
@@ -59,7 +61,8 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         if (context is not null) context.Post(state => { if (!disposed && !IsBusy) _ = ReloadAsync(); }, null);
         else _ = ReloadAsync();
     }
-    [RelayCommand] private void Add()
+    private bool CanAdd() => IsReady && !IsBusy;
+    [RelayCommand(CanExecute = nameof(CanAdd))] private void Add()
     {
         if (service is null || IsBusy) return;
         if (editing) { NavigationRequested?.Invoke(IslandPage.Editor); return; }

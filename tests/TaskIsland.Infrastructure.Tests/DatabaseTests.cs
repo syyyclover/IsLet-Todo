@@ -89,6 +89,38 @@ public sealed class DatabaseTests : IDisposable
         using var db = Open(); Assert.Equal("wal", Scalar(db, "PRAGMA journal_mode"));
         await Assert.ThrowsAsync<SqliteException>(() => store.WriteAsync(tx => { tx.SaveReminder(new(Guid.NewGuid(), 1, TaskIsland.Application.ReminderStatus.Pending, 0, Now, null)); return 0; }));
     }
+    [Fact] public async Task LegacySnakeCaseSchemaMigratesWithoutLosingTasksOrRelatedRecords()
+    {
+        Directory.CreateDirectory(root);
+        var id = Guid.NewGuid();
+        using (var db = Open()) Execute(db, $"""
+            CREATE TABLE tasks(id TEXT PRIMARY KEY,title TEXT NOT NULL,created_at_utc INTEGER NOT NULL,updated_at_utc INTEGER NOT NULL,due_at_utc INTEGER,archive_at_utc INTEGER NOT NULL,archived_at_utc INTEGER,archive_reason INTEGER,reminder_revision INTEGER NOT NULL);
+            CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT);
+            CREATE TABLE reminder_deliveries(task_id TEXT NOT NULL,reminder_revision INTEGER NOT NULL,status INTEGER NOT NULL,attempt_count INTEGER NOT NULL,next_attempt_at_utc INTEGER,last_error TEXT,PRIMARY KEY(task_id,reminder_revision));
+            CREATE TABLE attachments(id TEXT PRIMARY KEY,task_id TEXT REFERENCES tasks(id),stored_relative_path TEXT);
+            CREATE TABLE pending_file_cleanup(id INTEGER PRIMARY KEY,stored_relative_path TEXT);
+            INSERT INTO tasks VALUES('{id}','保留旧日程',1000,1000,NULL,9999999999999,NULL,NULL,3);
+            INSERT INTO settings VALUES('PinnedTaskId','{id}');
+            INSERT INTO reminder_deliveries VALUES('{id}',3,1,1,NULL,NULL);
+            INSERT INTO attachments VALUES('attachment','{id}','copies/preserved.txt');
+            INSERT INTO pending_file_cleanup VALUES(1,'copies/queued.txt');
+            PRAGMA user_version=1;
+            """);
+        await using var store = new SqliteTaskStore(root); await store.InitializeAsync();
+        var task = Assert.Single(await store.ReadAsync(tx => tx.ListActive()));
+        Assert.Equal(id, task.Id); Assert.Equal("保留旧日程", task.Title); Assert.Equal(3, task.ReminderRevision);
+        Assert.Equal(id, await store.ReadAsync(tx => tx.GetPinnedTaskId()));
+        Assert.Equal(TaskIsland.Application.ReminderStatus.Submitted, (await store.ReadAsync(tx => tx.FindReminder(id, 3)))!.Status);
+        await store.WriteAsync(tx => { tx.Save(task with { Title = "可继续编辑" }); return 0; });
+        using var current = Open();
+        Assert.Equal(1L, Scalar(current, "SELECT COUNT(*) FROM attachments"));
+        Assert.Equal(1L, Scalar(current, "SELECT COUNT(*) FROM pending_file_cleanup"));
+        Assert.Equal(2L, Scalar(current, "PRAGMA user_version"));
+        var backup = Assert.Single(Directory.GetFiles(Path.Combine(root, "backups"), "*.db"));
+        using var saved = new SqliteConnection($"Data Source={backup};Pooling=False"); saved.Open();
+        Assert.Equal(1L, Scalar(saved, "PRAGMA user_version"));
+        Assert.Equal("保留旧日程", Scalar(saved, "SELECT title FROM tasks"));
+    }
     [Fact] public async Task DisposalDrainsAcceptedWrites()
     {
         var store = new SqliteTaskStore(root); await store.InitializeAsync();

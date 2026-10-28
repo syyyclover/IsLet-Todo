@@ -24,6 +24,14 @@ public class TaskWorkflowTests : IAsyncLifetime
         await model.RestoreCommand.ExecuteAsync(model.ArchivedTasks[0]);
         Assert.Single(model.Tasks); Assert.Empty(model.ArchivedTasks);
     }
+    [Fact] public async Task AddIsUnavailableUntilStorageHasLoaded()
+    {
+        using var cold = new IslandViewModel();
+        Assert.False(cold.AddCommand.CanExecute(null));
+        await cold.AttachAsync(new TaskService(store, TimeProvider.System));
+        Assert.True(cold.AddCommand.CanExecute(null));
+        cold.IsBusy = true; Assert.False(cold.AddCommand.CanExecute(null));
+    }
     [Fact] public async Task SaveFailureKeepsInputAndEditorState()
     {
         model.AddCommand.Execute(null); model.EditorTitle = " ";
@@ -111,6 +119,46 @@ public class TaskWorkflowTests : IAsyncLifetime
             Assert.Equal(System.Windows.Visibility.Visible, ((System.Windows.FrameworkElement)window.FindName("TasksPanel")).Visibility);
             Assert.Equal("窗口流程", Assert.Single(vm.Tasks).Title);
         });
+    }
+    [Fact] public void ExpandedEmptyIslandExposesStyledAddButtonAndOpensEditor()
+    {
+        IslandMotionTests.RunSta(window =>
+        {
+            FinishOnDispatcher(window.AttachTasksAsync(new TaskService(store, TimeProvider.System)));
+            window.OpenTasks(false); IslandMotionTests.Pump(300);
+            var add = Assert.IsType<System.Windows.Controls.Button>(window.FindName("AddTaskButton"));
+            Assert.True(add.IsVisible); Assert.True(add.IsEnabled);
+            Assert.True(add.ActualWidth >= 300); Assert.True(add.ActualHeight >= 32);
+            Assert.Equal("添加日程", System.Windows.Automation.AutomationProperties.GetName(add));
+            Assert.NotNull(add.Template);
+            var empty = (System.Windows.FrameworkElement)window.FindName("EmptyTasksPanel");
+            Assert.Equal(System.Windows.Visibility.Visible, empty.Visibility);
+            var peer = new System.Windows.Automation.Peers.ButtonAutomationPeer(add);
+            ((System.Windows.Automation.Provider.IInvokeProvider)peer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            IslandMotionTests.Pump(40);
+            Assert.Equal(System.Windows.Visibility.Visible, ((System.Windows.FrameworkElement)window.FindName("EditorPanel")).Visibility);
+            CaptureWindow(window, "editor");
+            var vm = (IslandViewModel)window.DataContext;
+            vm.CancelEditCommand.Execute(null); IslandMotionTests.Pump(40);
+            CaptureWindow(window, "empty");
+            vm.AddCommand.Execute(null); vm.EditorTitle = "整理今天的工作清单";
+            FinishOnDispatcher(vm.SaveCommand.ExecuteAsync(null)); IslandMotionTests.Pump(40);
+            CaptureWindow(window, "tasks");
+            window.OpenSettings(); CaptureWindow(window, "settings");
+            window.OpenArchive(); CaptureWindow(window, "archive");
+        });
+    }
+    private static void CaptureWindow(IslandWindow window, string name)
+    {
+        var directory = Environment.GetEnvironmentVariable("TASKISLAND_CAPTURE_DIR");
+        if (string.IsNullOrEmpty(directory)) return;
+        Directory.CreateDirectory(directory);
+        window.UpdateLayout();
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(360, 295, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(window);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using var file = File.Create(Path.Combine(directory, name + ".png")); encoder.Save(file);
     }
     private static void FinishOnDispatcher(Task task)
     {

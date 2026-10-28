@@ -22,6 +22,18 @@ internal static class DatabaseSchema
         if (version < CurrentVersion)
         {
             using var tx = db.BeginTransaction();
+            var legacy = version == 1 && Convert.ToInt64(Scalar(db,
+                "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name='archive_at_utc'")) == 1;
+            if (legacy)
+            {
+                // Known pre-M2 schema. Preserve records and related tables; all changes roll back together.
+                foreach (var (oldName, newName) in new[] {
+                    ("created_at_utc", "CreatedAtUtc"), ("updated_at_utc", "UpdatedAtUtc"),
+                    ("due_at_utc", "DueAtUtc"), ("archive_at_utc", "ArchiveAtUtc"),
+                    ("archived_at_utc", "ArchivedAtUtc"), ("archive_reason", "ArchiveReason"),
+                    ("reminder_revision", "ReminderRevision") })
+                    Execute(db, $"ALTER TABLE tasks RENAME COLUMN {oldName} TO {newName};", tx);
+            }
             if (version == 0) Execute(db, """
                 CREATE TABLE Tasks(
                   Id TEXT PRIMARY KEY, Title TEXT NOT NULL, CreatedAtUtc INTEGER NOT NULL,
@@ -36,8 +48,13 @@ internal static class DatabaseSchema
                   NextAttemptAtUtc INTEGER, LastError TEXT, PRIMARY KEY(TaskId, Revision));
                 CREATE INDEX IX_Tasks_ActiveArchive ON Tasks(ArchiveAtUtc) WHERE ArchivedAtUtc IS NULL;
                 CREATE INDEX IX_Tasks_Archived ON Tasks(ArchivedAtUtc DESC, Id) WHERE ArchivedAtUtc IS NOT NULL;
-                PRAGMA user_version=2;
                 """, tx);
+            if (legacy) Execute(db, """
+                INSERT INTO ReminderDeliveries(TaskId,Revision,Status,Attempts,NextAttemptAtUtc,LastError)
+                  SELECT task_id,reminder_revision,status,attempt_count,next_attempt_at_utc,last_error FROM reminder_deliveries;
+                DROP TABLE reminder_deliveries;
+                """, tx);
+            Execute(db, "PRAGMA user_version=2;", tx);
             tx.Commit();
         }
         Execute(db, "PRAGMA journal_mode=WAL;");

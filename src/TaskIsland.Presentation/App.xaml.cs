@@ -90,7 +90,7 @@ public partial class App : System.Windows.Application
         {
             WriteDiagnostic("startup", ex);
             // Keep feedback in the island if the main window was already created.
-            if (island is not null) island.ShowStatus("本地日程加载失败，原数据已保留。请检查日志并重启。");
+            if (island is not null) { island.ShowError("本地日程加载失败，原数据已保留。请检查日志并重启。"); island.OpenTasks(false); }
             else Shutdown(1);
         }
     }
@@ -115,7 +115,8 @@ public partial class App : System.Windows.Application
     }
 
     internal static void WriteDiagnostic(string operation, Exception ex)
-        => WriteEvent($"{operation} {ex.GetType().Name} 0x{ex.HResult:X8}");
+        => WriteEvent($"{operation} {ex.GetType().Name} 0x{ex.HResult:X8}" +
+            (ex is Microsoft.Data.Sqlite.SqliteException sqlite ? $" sqlite={sqlite.SqliteErrorCode}/{sqlite.SqliteExtendedErrorCode}" : ""));
 
     private static void WriteEvent(string message)
     {
