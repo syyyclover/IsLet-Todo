@@ -1,0 +1,31 @@
+# .NET / IDE
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+*.trx
+coverage/
+artifacts/
+publish/
+
+# Local application data and diagnostics
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.dmp
+
+# Local secrets
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+
+# OS
+Thumbs.db
+Desktop.ini

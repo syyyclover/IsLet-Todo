@@ -1,0 +1,15 @@
+* text=auto
+*.md text eol=lf whitespace=-blank-at-eol
+*.cs text eol=lf
+*.xaml text eol=lf
+*.json text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
