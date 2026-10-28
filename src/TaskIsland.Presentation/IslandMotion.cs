@@ -5,7 +5,7 @@ using TaskIsland.Application;
 
 namespace TaskIsland.Presentation;
 
-/// <summary>Animates render-only geometry; the HWND changes size only at transition boundaries.</summary>
+/// <summary>Animates render-only geometry inside a stable, island-sized layered surface.</summary>
 internal sealed class IslandMotion : Animatable
 {
     private static readonly DependencyProperty RevealProperty = DependencyProperty.Register(
@@ -36,26 +36,31 @@ internal sealed class IslandMotion : Animatable
     private double Reveal { get => (double)GetValue(RevealProperty); set => SetValue(RevealProperty, value); }
     public bool Contains(Point point) => clip.FillContains(point);
 
-    public void Transition(bool expanded, bool animate, WorkArea area, IslandAnchor newAnchor)
+    public void ConfigureViewport(WorkArea area, IslandAnchor newAnchor)
     {
         anchor = newAnchor;
         expandedWidth = Math.Min(360, Math.Max(1, area.Width));
         expandedHeight = Math.Min(295, Math.Max(1, area.Height - 8));
         surface.Width = expandedWidth; surface.Height = expandedHeight;
+        // Resizing a layered HWND invalidates its backing surface. Keep it stable across open/close.
+        window.Width = expandedWidth; window.Height = expandedHeight;
+        positionWindow();
+        UpdateGeometry();
+    }
+
+    public void Transition(bool expanded, bool animate, WorkArea area, IslandAnchor newAnchor)
+    {
+        ConfigureViewport(area, newAnchor);
         if (targetExpanded == expanded && !HasAnimatedProperties)
         {
-            ResizeHost(expanded); UpdateGeometry();
             return;
         }
 
         targetExpanded = expanded;
         var generation = ++transition;
         var from = Reveal;
-        BeginAnimation(RevealProperty, null);
         Reveal = from;
-        // Reserve only the expanded island footprint, never a monitor-sized transparent window.
-        ResizeHost(true);
-        UpdateGeometry();
+        BeginAnimation(RevealProperty, null);
         var target = expanded ? 1d : 0d;
         content.Visibility = Visibility.Visible;
         content.IsHitTestVisible = expanded;
@@ -80,9 +85,9 @@ internal sealed class IslandMotion : Animatable
     {
         var opacity = content.Opacity;
         var offset = contentOffset.Y;
+        content.Opacity = opacity; contentOffset.Y = offset;
         content.BeginAnimation(UIElement.OpacityProperty, null);
         contentOffset.BeginAnimation(TranslateTransform.YProperty, null);
-        content.Opacity = opacity; contentOffset.Y = offset;
         var duration = TimeSpan.FromMilliseconds(expanded ? 170 : 100);
         content.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(opacity, expanded ? 1 : 0, duration)
         { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
@@ -92,28 +97,20 @@ internal sealed class IslandMotion : Animatable
 
     private void SetContentImmediately(bool expanded)
     {
-        content.BeginAnimation(UIElement.OpacityProperty, null);
-        contentOffset.BeginAnimation(TranslateTransform.YProperty, null);
         content.Opacity = expanded ? 1 : 0;
         contentOffset.Y = expanded ? 0 : 8;
+        content.BeginAnimation(UIElement.OpacityProperty, null);
+        contentOffset.BeginAnimation(TranslateTransform.YProperty, null);
     }
 
     private void Finish(bool expanded, int generation)
     {
         if (generation != transition) return;
-        BeginAnimation(RevealProperty, null);
         Reveal = expanded ? 1 : 0;
+        BeginAnimation(RevealProperty, null);
         SetContentImmediately(expanded);
         content.Visibility = expanded ? Visibility.Visible : Visibility.Hidden;
-        ResizeHost(expanded);
         UpdateGeometry();
-    }
-
-    private void ResizeHost(bool expanded)
-    {
-        window.Width = expanded ? expandedWidth : Math.Min(240, expandedWidth);
-        window.Height = expanded ? expandedHeight : Math.Min(40, expandedHeight);
-        positionWindow();
     }
 
     private void UpdateGeometry()

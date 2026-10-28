@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -12,6 +13,65 @@ using Xunit.Abstractions;
 
 public class IslandMotionTests(ITestOutputHelper output)
 {
+    [Fact]
+    public void OpeningAndClosingKeepNativeSurfaceSizeStable() => RunSta(window =>
+    {
+        var initial = NativeBounds(window);
+        var changes = 0;
+        window.SizeChanged += (_, _) => changes++;
+        window.OpenTasks(false);
+        Pump(300);
+        Escape(window);
+        Pump(350);
+        Assert.Equal(0, changes);
+        Assert.Equal(initial, NativeBounds(window));
+    });
+
+    [Theory]
+    [InlineData("Left", 0)]
+    [InlineData("Center", 60)]
+    [InlineData("Right", 120)]
+    public void CollapsedAnchorsStayInPlaceAcrossOpenClose(string anchor, double expectedInset) => RunSta(window =>
+    {
+        window.OpenSettings();
+        var panel = (System.Windows.Controls.StackPanel)window.FindName("SettingsPanel");
+        var buttons = (System.Windows.Controls.StackPanel)panel.Children[1];
+        var button = buttons.Children.OfType<System.Windows.Controls.Button>().Single(item => (string)item.Tag == anchor);
+        button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, button));
+        window.OpenTasks(false);
+        Pump(300);
+        Escape(window);
+        Pump(300);
+        var clip = (System.Windows.Media.RectangleGeometry)window.FindName("IslandClip");
+        Assert.Equal(expectedInset, clip.Rect.X);
+        var before = window.PointToScreen(clip.Rect.TopLeft);
+        window.OpenTasks(false);
+        Pump(300);
+        Escape(window);
+        Pump(300);
+        Assert.Equal(before, window.PointToScreen(clip.Rect.TopLeft));
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CompletingMotionNeverPublishesOppositeShape(bool expanding) => RunSta(window =>
+    {
+        if (!expanding) { window.OpenTasks(false); Pump(300); }
+        var clip = (System.Windows.Media.RectangleGeometry)window.FindName("IslandClip");
+        var previous = clip.Rect.Width;
+        var reversed = false;
+        clip.Changed += (_, _) =>
+        {
+            var current = clip.Rect.Width;
+            if (expanding ? current + 0.01 < previous : current - 0.01 > previous) reversed = true;
+            previous = current;
+        };
+        if (expanding) window.OpenTasks(false); else Escape(window);
+        Pump(400);
+        Assert.False(reversed, "Animation endpoint briefly exposed the old base shape");
+    });
+
     [Fact]
     public void ExpandingDoesNotResizeNativeWindowEveryFrame() => RunSta(window =>
     {
@@ -29,16 +89,20 @@ public class IslandMotionTests(ITestOutputHelper output)
     });
 
     [Fact]
-    public void CollapseReleasesExpandedTransparentFootprint() => RunSta(window =>
+    public void CollapseLeavesOnlySmallVisibleFootprint() => RunSta(window =>
     {
         window.OpenTasks(false);
         Pump(300);
         Escape(window);
         Pump(350);
-        Assert.Equal(240, window.Width);
-        Assert.Equal(40, window.Height);
+        Assert.Equal(360, window.Width);
+        Assert.Equal(295, window.Height);
         var clip = (System.Windows.Media.RectangleGeometry)window.FindName("IslandClip");
-        Assert.Equal(new Rect(0, 0, 240, 40), clip.Rect);
+        Assert.Equal(new Rect(60, 0, 240, 40), clip.Rect);
+        var bitmap = Render(window);
+        var pixel = new byte[4];
+        bitmap.CopyPixels(new Int32Rect(5, 150, 1, 1), pixel, 4, 0);
+        Assert.Equal(0, pixel[3]); // Unpainted margin remains alpha-zero for layered hit testing.
     });
 
     [Fact]
@@ -50,8 +114,7 @@ public class IslandMotionTests(ITestOutputHelper output)
         var clip = (System.Windows.Media.RectangleGeometry)window.FindName("IslandClip");
         Assert.Equal(new Rect(0, 0, 360, 295), clip.Rect);
         Escape(window);
-        Assert.Equal(240, window.Width);
-        Assert.Equal(40, window.Height);
+        Assert.Equal(new Rect(60, 0, 240, 40), clip.Rect);
     });
 
     private static void Escape(IslandWindow window) => window.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,
@@ -84,6 +147,25 @@ public class IslandMotionTests(ITestOutputHelper output)
         Pump(350);
         Assert.Equal(360, window.Width);
         Assert.Equal(295, window.Height);
+        var clip = (System.Windows.Media.RectangleGeometry)window.FindName("IslandClip");
+        Assert.Equal(new Rect(0, 0, 360, 295), clip.Rect);
+        var content = (FrameworkElement)window.FindName("ContentPanel");
+        Assert.Equal(Visibility.Visible, content.Visibility);
+        Assert.Equal(1, content.Opacity);
+    });
+
+    [Fact]
+    public void ReversingExpansionFinishesCollapsedWithoutStaleReveal() => RunSta(window =>
+    {
+        window.OpenTasks(false);
+        Pump(70);
+        Escape(window);
+        Pump(350);
+        var clip = (System.Windows.Media.RectangleGeometry)window.FindName("IslandClip");
+        Assert.Equal(new Rect(60, 0, 240, 40), clip.Rect);
+        var content = (FrameworkElement)window.FindName("ContentPanel");
+        Assert.Equal(Visibility.Hidden, content.Visibility);
+        Assert.Equal(0, content.Opacity);
     });
 
     private static void RunSta(Action<IslandWindow> check)
@@ -128,12 +210,30 @@ public class IslandMotionTests(ITestOutputHelper output)
         var directory = Environment.GetEnvironmentVariable("TASKISLAND_CAPTURE_DIR");
         if (string.IsNullOrEmpty(directory)) return;
         System.IO.Directory.CreateDirectory(directory);
-        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)window.ActualWidth,
-            (int)window.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-        bitmap.Render(window);
+        var bitmap = Render(window);
         var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
         encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
         using var file = System.IO.File.Create(System.IO.Path.Combine(directory, name + ".png"));
         encoder.Save(file);
     }
+
+    private static System.Windows.Media.Imaging.RenderTargetBitmap Render(IslandWindow window)
+    {
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)window.ActualWidth,
+            (int)window.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(window);
+        return bitmap;
+    }
+
+    private static Rect NativeBounds(IslandWindow window)
+    {
+        Assert.True(GetWindowRect(new WindowInteropHelper(window).Handle, out var bounds));
+        return new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint handle, out NativeRect bounds);
 }

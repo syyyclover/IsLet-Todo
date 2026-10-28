@@ -38,7 +38,7 @@ public partial class IslandWindow : Window
         {
             source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             source.AddHook(WindowMessages);
-            PositionWindow();
+            RefreshViewport();
         };
         SizeChanged += (_, _) => PositionWindow();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
@@ -70,7 +70,7 @@ public partial class IslandWindow : Window
     private void OnAnchor(object sender, RoutedEventArgs e)
     {
         model.Anchor = Enum.Parse<IslandAnchor>((string)((Button)sender).Tag);
-        PositionWindow();
+        RefreshViewport();
     }
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
@@ -107,12 +107,12 @@ public partial class IslandWindow : Window
         if (handle == 0) return;
         var area = DesktopPlacement.PrimaryWorkAreaInDips(handle);
         MaxWidth = Math.Max(1, area.Width); MaxHeight = Math.Max(1, area.Height - 8);
-        var bounds = IslandPlacement.Calculate(area, ActualWidth > 0 ? ActualWidth : Width, ActualHeight > 0 ? ActualHeight : Height, model.Anchor);
+        var bounds = IslandPlacement.Calculate(area, Width, Height, model.Anchor);
         Left = bounds.X; Top = bounds.Y;
     }
     private nint WindowMessages(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
-        if (message is 0x02E0 or 0x001A or 0x007E) Dispatcher.BeginInvoke(PositionWindow);
+        if (message is 0x02E0 or 0x001A or 0x007E) Dispatcher.BeginInvoke(RefreshViewport);
         if (message == 0x0084) // Alpha-zero layered pixels handle cross-process margins; this assists same-thread hit testing.
         {
             var packed = lParam.ToInt64();
@@ -123,7 +123,12 @@ public partial class IslandWindow : Window
         if (message == 0x0021) { handled = true; return 3; } // MA_NOACTIVATE; buttons explicitly activate on click.
         return 0;
     }
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(PositionWindow);
+    private void RefreshViewport()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle != 0) motion.ConfigureViewport(DesktopPlacement.PrimaryWorkAreaInDips(handle), model.Anchor);
+    }
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(RefreshViewport);
     private void OnSystemParametersChanged(object? sender, PropertyChangedEventArgs e)
-        => Dispatcher.BeginInvoke(e.PropertyName == nameof(SystemParameters.ClientAreaAnimation) ? RenderState : PositionWindow);
+        => Dispatcher.BeginInvoke(e.PropertyName == nameof(SystemParameters.ClientAreaAnimation) ? RenderState : RefreshViewport);
 }
