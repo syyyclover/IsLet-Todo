@@ -6,6 +6,18 @@ namespace TaskIsland.Infrastructure;
 
 internal sealed class SqliteTaskSession(SqliteConnection db, SqliteTransaction tx) : ITaskWriter
 {
+    public string? ReadSetting(string key)
+    {
+        using var command = Command("SELECT Value FROM Settings WHERE Key=$key", ("$key", key));
+        return command.ExecuteScalar() as string;
+    }
+    public void WriteSetting(string key, string? value)
+    {
+        using var command = value is null
+            ? Command("DELETE FROM Settings WHERE Key=$key", ("$key", key))
+            : Command("INSERT INTO Settings(Key,Value) VALUES($key,$value) ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value", ("$key", key), ("$value", value));
+        command.ExecuteNonQuery();
+    }
     public TaskItem? Find(Guid id) => QueryTasks("SELECT * FROM Tasks WHERE Id=$id", ("$id", id.ToString())).SingleOrDefault();
     public IReadOnlyList<TaskItem> ListActive() => QueryTasks("SELECT * FROM Tasks WHERE ArchivedAtUtc IS NULL");
     public IReadOnlyList<TaskItem> ListArchived(int skip, int take)
@@ -63,8 +75,31 @@ internal sealed class SqliteTaskSession(SqliteConnection db, SqliteTransaction t
             ("$id", taskId.ToString()), ("$skipped", (int)ReminderStatus.Skipped), ("$pending", (int)ReminderStatus.Pending), ("$failed", (int)ReminderStatus.Failed));
         command.ExecuteNonQuery();
     }
-    public void Delete(Guid id) { using var command = Command("DELETE FROM Tasks WHERE Id=$id", ("$id", id.ToString())); command.ExecuteNonQuery(); }
-    public void DeleteAllArchived() { using var command = Command("DELETE FROM Tasks WHERE ArchivedAtUtc IS NOT NULL"); command.ExecuteNonQuery(); }
+    public void Delete(Guid id)
+    {
+        EnsureNoAttachments(id);
+        using var command = Command("DELETE FROM Tasks WHERE Id=$id", ("$id", id.ToString()));
+        command.ExecuteNonQuery();
+    }
+    public void DeleteAllArchived()
+    {
+        EnsureNoAttachments(null);
+        using var command = Command("DELETE FROM Tasks WHERE ArchivedAtUtc IS NOT NULL");
+        command.ExecuteNonQuery();
+    }
+
+    private void EnsureNoAttachments(Guid? taskId)
+    {
+        // Migrated databases can retain legacy attachment records. Until M4 coordinates
+        // transactions with its cleanup queue, neither cascade nor orphan those copies.
+        using var table = Command("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='attachments' COLLATE NOCASE)");
+        if (Convert.ToInt64(table.ExecuteScalar()) == 0) return;
+        using var attached = taskId is { } id
+            ? Command("SELECT EXISTS(SELECT 1 FROM attachments WHERE task_id=$id)", ("$id", id.ToString()))
+            : Command("SELECT EXISTS(SELECT 1 FROM attachments AS a JOIN Tasks AS t ON a.task_id=t.Id WHERE t.ArchivedAtUtc IS NOT NULL)");
+        if (Convert.ToInt64(attached.ExecuteScalar()) != 0)
+            throw new InvalidOperationException("此日程含附件，暂时无法彻底删除");
+    }
 
     private List<TaskItem> QueryTasks(string sql, params (string Key, object? Value)[] parameters)
     {

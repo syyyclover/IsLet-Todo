@@ -18,6 +18,9 @@ public partial class App : System.Windows.Application
     private IslandWindow? island;
     private SqliteTaskStore? taskStore;
     private TaskIsland.Application.TaskScheduler? scheduler;
+    private bool tasksReady;
+    private string? pendingActivation;
+    private string? integrationWarning;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -42,6 +45,7 @@ public partial class App : System.Windows.Application
                 return;
             }
             notifications = new NotificationService();
+            notifications.Diagnostic += WriteEvent;
             notifications.Activated += value => Dispatcher.BeginInvoke(() => RouteNotificationAsync(value));
             notifications.Register();
             WriteEvent($"startup.notifications {startupWatch.ElapsedMilliseconds}ms");
@@ -71,6 +75,7 @@ public partial class App : System.Windows.Application
                 () => Dispatch(() => island.OpenSettings()), () => Dispatch(() => island.OpenArchive()),
                 () => Dispatch(Shutdown));
             island.Show();
+            try { island.StartFullscreenMonitoring(); } catch (Exception ex) { WriteDiagnostic("fullscreen", ex); integrationWarning = "全屏检测不可用"; }
             WriteEvent($"startup.window {startupWatch.ElapsedMilliseconds}ms");
             if (argument != "show") HandleActivation(argument);
             taskStore = new SqliteTaskStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TaskIsland"));
@@ -80,7 +85,16 @@ public partial class App : System.Windows.Application
             await taskService.ReconcileTimeAsync();
             await island.AttachTasksAsync(taskService);
             if (Dispatcher.HasShutdownStarted) return;
-            scheduler = new(taskService, TimeProvider.System);
+            await island.AttachSettingsAsync(new SettingsService(taskStore));
+            if (Dispatcher.HasShutdownStarted) return;
+            tasksReady = true;
+            _ = notifications.InspectAsync();
+            if (pendingActivation is { } pending) { pendingActivation = null; HandleActivation(pending); }
+            if (notifications.Error is { } notificationError) island.ShowError(notificationError);
+            else if (integrationWarning is { } warning) island.ShowError(warning);
+            var reminderDispatcher = new ReminderDispatcher(taskService, taskStore, notifications, TimeProvider.System);
+            scheduler = new(taskService, TimeProvider.System, reminderDispatcher);
+            scheduler.CycleCompleted += () => Dispatcher.BeginInvoke(CheckReminderStatus);
             scheduler.Failed += ex => Dispatcher.BeginInvoke(() => { WriteDiagnostic("scheduler", ex); island.ShowStatus("时间校准暂时失败，将在下次校准时重试。"); });
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
             SystemEvents.TimeChanged += OnSystemTimeChanged;
@@ -103,15 +117,33 @@ public partial class App : System.Windows.Application
         catch (Exception ex) { WriteDiagnostic("notification-forward", ex); }
         finally { Shutdown(); }
     }
-    private void HandleActivation(string argument)
+    private async void HandleActivation(string argument)
     {
-        if (island is null) return;
-        island.OpenTasks(true);
-        if (argument != "show")
+        if (!tasksReady || island is null)
+        {
+            if (pendingActivation is null || ActivationRequest.Parse(argument).TaskId is not null || ActivationRequest.Parse(pendingActivation).TaskId is null)
+                pendingActivation = argument;
+            return;
+        }
+        try
         {
             var request = TaskIsland.Application.ActivationRequest.Parse(argument);
-            island.ShowStatus(request.TaskId.HasValue ? "通知激活成功；任务定位将在任务阶段接入。" : "通知参数无效，已打开日程岛。");
+            await island.FocusNotificationAsync(request.TaskId);
+            if (request.TaskId is null && argument is not "show" and not "action=show") island.ShowStatus("通知参数无效，已打开日程岛");
         }
+        catch (Exception ex) { WriteDiagnostic("notification-route", ex); island.ShowError("日程定位失败，请重试"); }
+    }
+    private async void CheckReminderStatus()
+    {
+        if (taskStore is null || Dispatcher.HasShutdownStarted) return;
+        try
+        {
+            var failed = await taskStore.ReadAsync(tx => tx.ListActive().Any(item =>
+                tx.FindReminder(item.Id, item.ReminderRevision) is { Status: ReminderStatus.Failed, Attempts: >= 3 }));
+            if (failed) island?.ShowError("部分提醒提交失败，请检查系统通知设置");
+        }
+        catch (ObjectDisposedException) { }
+        catch (Exception ex) { WriteDiagnostic("notification-status", ex); }
     }
 
     internal static void WriteDiagnostic(string operation, Exception ex)

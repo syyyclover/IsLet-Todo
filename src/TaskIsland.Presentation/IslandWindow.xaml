@@ -44,12 +44,13 @@
      <TextBlock Text="岛的位置" Foreground="#F3F4F7" Margin="5,5"/>
      <StackPanel Orientation="Horizontal"><Button Content="左侧" Tag="Left" Click="OnAnchor"/><Button Content="居中" Tag="Center" Click="OnAnchor"/><Button Content="右侧" Tag="Right" Click="OnAnchor"/></StackPanel>
      <CheckBox Content="启用动画" IsChecked="{Binding AnimationsEnabled}" Foreground="#F3F4F7" Margin="6,12"/>
-     <TextBlock Text="位置和动画设置在退出后恢复默认。" Foreground="#A8AEBC" Margin="5,0" TextWrapping="Wrap"/>
+     <CheckBox x:Name="AutoStartCheck" Content="登录时启动" Click="OnAutoStart" Foreground="#F3F4F7" Margin="6,2,6,8"/>
+     <TextBlock Text="全屏时自动隐藏，设置自动保存" Foreground="#A8AEBC" FontSize="11" Margin="5,0"/>
     </StackPanel>
     <StackPanel x:Name="ArchivePanel" Visibility="Collapsed">
-     <TextBlock Text="归档日程" Foreground="#F3F4F7" Margin="5,4"/>
-     <ListBox ItemsSource="{Binding ArchivedTasks}" Height="110" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-      <ListBox.ItemTemplate><DataTemplate><DockPanel Height="44"><Button Content="恢复" DockPanel.Dock="Right" Command="{Binding DataContext.RestoreCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="8,4"/><StackPanel Margin="4"><TextBlock Text="{Binding Title}" Foreground="#F3F4F7" FontSize="12" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#939CAD" FontSize="10"/></StackPanel></DockPanel></DataTemplate></ListBox.ItemTemplate>
+     <DockPanel><Button Content="清空归档" Style="{StaticResource QuietButton}" DockPanel.Dock="Right" Command="{Binding RequestDeleteAllCommand}"/><TextBlock Text="归档日程" Foreground="#F3F4F7" Margin="5,4" VerticalAlignment="Center"/></DockPanel>
+     <ListBox ItemsSource="{Binding ArchivedTasks}" Height="100" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+      <ListBox.ItemTemplate><DataTemplate><DockPanel Height="44"><Button Content="删除" DockPanel.Dock="Right" Style="{StaticResource QuietButton}" Command="{Binding DataContext.RequestDeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/><Button Content="恢复" DockPanel.Dock="Right" Command="{Binding DataContext.RestoreCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Padding="8,4"/><StackPanel Margin="4"><TextBlock Text="{Binding Title}" Foreground="#F3F4F7" FontSize="12" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#939CAD" FontSize="10"/></StackPanel></DockPanel></DataTemplate></ListBox.ItemTemplate>
      </ListBox>
      <Button Content="加载更多" Command="{Binding LoadMoreArchivesCommand}" Visibility="{Binding HasMoreArchives, Converter={StaticResource BoolVisibility}}" Padding="8,4"/>
     </StackPanel>
@@ -62,6 +63,7 @@
      <StackPanel Visibility="{Binding ConfirmDiscard, Converter={StaticResource BoolVisibility}}"><TextBlock Text="内容尚未保存" Foreground="#E9C88C" Margin="5,5"/><StackPanel Orientation="Horizontal"><Button Style="{StaticResource PrimaryButton}" Content="继续编辑" Command="{Binding KeepEditingCommand}"/><Button Content="放弃修改" Command="{Binding DiscardChangesCommand}"/></StackPanel></StackPanel>
     </StackPanel>
     </ScrollViewer>
+    <local:DeletionConfirmationControl Visibility="{Binding ConfirmDelete, Converter={StaticResource BoolVisibility}}" VerticalAlignment="Center"/>
     </Grid>
     <TextBlock Text="{Binding Status}" FontSize="11" Margin="5,10,5,0" TextWrapping="Wrap"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#A6D9B5"/><Style.Triggers><DataTrigger Binding="{Binding IsError}" Value="True"><Setter Property="Foreground" Value="#F2A5A5"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
    </StackPanel>

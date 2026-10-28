@@ -6,6 +6,7 @@ public sealed class TaskScheduler : IAsyncDisposable
 {
     private readonly TaskService service;
     private readonly TimeProvider clock;
+    private readonly ReminderDispatcher? dispatcher;
     private readonly CancellationTokenSource stop = new();
     private readonly Channel<bool> requests = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
     private ITimer? next;
@@ -14,7 +15,7 @@ public sealed class TaskScheduler : IAsyncDisposable
     public event Action? CycleCompleted;
     public event Action<Exception>? Failed;
 
-    public TaskScheduler(TaskService service, TimeProvider clock) { this.service = service; this.clock = clock; }
+    public TaskScheduler(TaskService service, TimeProvider clock, ReminderDispatcher? dispatcher = null) { this.service = service; this.clock = clock; this.dispatcher = dispatcher; }
     public void Start()
     {
         if (loop is not null) return;
@@ -33,8 +34,10 @@ public sealed class TaskScheduler : IAsyncDisposable
             {
                 try
                 {
-                    await service.ReconcileTimeAsync(stop.Token).ConfigureAwait(false);
-                    var deadline = await service.GetNextEventAtAsync(stop.Token).ConfigureAwait(false);
+                    if (dispatcher is not null) await dispatcher.DispatchAsync(stop.Token).ConfigureAwait(false);
+                    else await service.ReconcileTimeAsync(stop.Token).ConfigureAwait(false);
+                    var deadline = dispatcher is not null ? await dispatcher.GetNextEventAtAsync(stop.Token).ConfigureAwait(false)
+                        : await service.GetNextEventAtAsync(stop.Token).ConfigureAwait(false);
                     var delay = deadline is { } instant ? instant - clock.GetUtcNow() : Timeout.InfiniteTimeSpan;
                     if (deadline is not null) delay = TimeSpan.FromMilliseconds(Math.Clamp(delay.TotalMilliseconds, 1, TimeSpan.FromDays(1).TotalMilliseconds));
                     next!.Change(delay, Timeout.InfiniteTimeSpan);

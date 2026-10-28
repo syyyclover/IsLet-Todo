@@ -31,6 +31,20 @@ public sealed class DatabaseTests : IDisposable
         Assert.Empty(await store.ReadAsync(tx => tx.ListActive()));
         Assert.Null(await store.ReadAsync(tx => tx.GetPinnedTaskId()));
     }
+    [Fact] public async Task GenericSettingsAreParameterizedUpdatedDeletedAndPersisted()
+    {
+        const string key = "theme'; DROP TABLE Tasks;--";
+        await using (var store = new SqliteTaskStore(root))
+        {
+            await store.InitializeAsync();
+            await store.WriteAsync(tx => { tx.WriteSetting(key, "dark"); tx.WriteSetting("temporary", "x"); tx.WriteSetting("temporary", null); return 0; });
+            await store.WriteAsync(tx => { tx.WriteSetting(key, "light"); return 0; });
+        }
+        await using var reopened = new SqliteTaskStore(root); await reopened.InitializeAsync();
+        Assert.Equal("light", await reopened.ReadAsync(tx => tx.ReadSetting(key)));
+        Assert.Null(await reopened.ReadAsync(tx => tx.ReadSetting("temporary")));
+        Assert.Empty(await reopened.ReadAsync(tx => tx.ListActive()));
+    }
     [Fact] public async Task ConcurrentTransactionsDoNotLoseWrites()
     {
         await using var store = new SqliteTaskStore(root); await store.InitializeAsync();

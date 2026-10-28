@@ -10,6 +10,7 @@ public sealed record TaskOverview(ActiveTaskList Active, IReadOnlyList<TaskItem>
 
 public interface ITaskReader
 {
+    string? ReadSetting(string key);
     TaskItem? Find(Guid id);
     IReadOnlyList<TaskItem> ListActive();
     IReadOnlyList<TaskItem> ListArchived(int skip, int take);
@@ -18,6 +19,7 @@ public interface ITaskReader
 }
 public interface ITaskWriter : ITaskReader
 {
+    void WriteSetting(string key, string? value);
     void Save(TaskItem item);
     void SetPinnedTaskId(Guid? id);
     void SaveReminder(ReminderDelivery delivery);

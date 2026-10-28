@@ -23,6 +23,10 @@ public partial class IslandWindow : Window
     private readonly IslandMotion motion;
     private IslandPage displayedPage = IslandPage.Tasks;
     private int pageGeneration;
+    private SettingsService? settingsService;
+    private StartupRegistration? startupRegistration;
+    private FullscreenMonitor? fullscreenMonitor;
+    private bool hiddenForFullscreen;
     public static readonly DependencyProperty IsCountdownRunningProperty = DependencyProperty.Register(nameof(IsCountdownRunning), typeof(bool), typeof(IslandWindow), new PropertyMetadata(false));
     public bool IsCountdownRunning { get => (bool)GetValue(IsCountdownRunningProperty); private set => SetValue(IsCountdownRunningProperty, value); }
 
@@ -37,6 +41,7 @@ public partial class IslandWindow : Window
         {
             if (args.PropertyName == nameof(IslandViewModel.AnimationsEnabled) && new WindowInteropHelper(this).Handle != 0)
                 RenderState();
+            if (settingsService is not null && args.PropertyName is nameof(IslandViewModel.Anchor) or nameof(IslandViewModel.AnimationsEnabled)) SaveSettings();
         };
         if (notifications.Error is not null) model.Status = notifications.Error;
         enterTimer.Tick += (_, _) => { enterTimer.Stop(); if (IsMouseOver && state.Page == IslandPage.Collapsed) OpenTasks(false); };
@@ -52,6 +57,7 @@ public partial class IslandWindow : Window
         SystemParameters.StaticPropertyChanged += OnSystemParametersChanged;
         Closed += (_, _) =>
         {
+            fullscreenMonitor?.Dispose();
             enterTimer.Stop(); leaveTimer.Stop(); source?.RemoveHook(WindowMessages);
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
@@ -66,12 +72,58 @@ public partial class IslandWindow : Window
     }
 
     public Task AttachTasksAsync(TaskService service) => model.AttachAsync(service);
+    public async Task AttachSettingsAsync(SettingsService service)
+    {
+        var saved = await service.LoadAsync();
+        model.Anchor = saved.Anchor; model.AnimationsEnabled = saved.AnimationsEnabled;
+        settingsService = service; RefreshViewport();
+        try { startupRegistration = new StartupRegistration(Environment.ProcessPath!); AutoStartCheck.IsChecked = startupRegistration.IsEnabled; }
+        catch (Exception ex) { AutoStartCheck.IsEnabled = false; App.WriteDiagnostic("startup-setting", ex); }
+    }
+    private async void SaveSettings()
+    {
+        try { await settingsService!.SaveAsync(new(model.Anchor, model.AnimationsEnabled)); }
+        catch (Exception ex) { App.WriteDiagnostic("settings", ex); ShowError("设置保存失败，请重试"); }
+    }
+    private void OnAutoStart(object sender, RoutedEventArgs e)
+    {
+        if (startupRegistration is null) return;
+        try { startupRegistration.SetEnabled(AutoStartCheck.IsChecked == true); ShowStatus("已更新登录启动设置"); }
+        catch (Exception ex) { AutoStartCheck.IsChecked = AutoStartCheck.IsChecked != true; App.WriteDiagnostic("startup-setting", ex); ShowError("登录启动设置失败"); }
+    }
+    public void StartFullscreenMonitoring()
+    {
+        fullscreenMonitor = new FullscreenMonitor(new WindowInteropHelper(this).Handle);
+        fullscreenMonitor.FullscreenChanged += (_, _) => ApplyFullscreen(); ApplyFullscreen();
+    }
+    private void ApplyFullscreen()
+    {
+        if (fullscreenMonitor!.IsFullscreen)
+        {
+            hiddenForFullscreen = true; IsCountdownRunning = false; Hide();
+        }
+        else if (hiddenForFullscreen) { hiddenForFullscreen = false; Show(); RenderState(); }
+    }
+    public async Task FocusNotificationAsync(Guid? taskId)
+    {
+        await model.ReloadAsync();
+        if (!model.TryLeaveEditor(IslandPage.Tasks)) { Activate(); return; }
+        OpenTasks(true);
+        if (taskId is not { } id) return;
+        var row = model.Tasks.FirstOrDefault(x => x.Item.Id == id);
+        if (row is null) { ShowStatus("这条日程已归档或不再存在"); return; }
+        ActiveList.SelectedItem = row; ActiveList.ScrollIntoView(row);
+        ActiveList.Focus(); ShowStatus("已定位到期日程");
+    }
     public void OpenTasks(bool focus) => Navigate(IslandPage.Tasks, focus);
     public void OpenSettings() => Navigate(IslandPage.Settings, true);
     public void OpenArchive() => Navigate(IslandPage.Archive, true);
     private void Navigate(IslandPage page, bool focus)
     {
+        if (model.ConfirmDelete && model.IsBusy) return;
+        if (focus && !IsVisible) { hiddenForFullscreen = false; Show(); }
         if (!model.TryLeaveEditor(page)) { if (focus) Activate(); return; }
+        if (page != IslandPage.Archive) model.CancelDeleteCommand.Execute(null);
         state.Navigate(page); RenderState();
         if (focus) Activate();
         if (page == IslandPage.Editor) Dispatcher.BeginInvoke(() => TitleInput.Focus(), DispatcherPriority.Input);
@@ -113,6 +165,7 @@ public partial class IslandWindow : Window
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
+        if (model.ConfirmDelete) { model.CancelDeleteCommand.Execute(null); e.Handled = true; return; }
         if (state.Page == IslandPage.Editor) { model.CancelEditCommand.Execute(null); e.Handled = true; return; }
         state.Navigate(state.Page is IslandPage.Settings or IslandPage.Archive ? IslandPage.Tasks : IslandPage.Collapsed);
         RenderState(); e.Handled = true;
