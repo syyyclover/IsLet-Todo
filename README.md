@@ -8,6 +8,8 @@
 
 ## 文档入口
 
+最新交互包：`artifacts/publish/m3-interaction-win-x64/TaskIsland.exe`。先从托盘退出旧版再启动此文件，避免单实例将启动转发给旧进程。已接入滚轮时间选择、同级页签滑动和局部沙漏动效；正式通知投递尚未完成。结果见 [交互验证](docs/validation/INTERACTION-2026-10-28.md)。
+
 - [产品与技术需求基线](IsLet_Todo.md)：功能、交互、时间规则、数据模型及验收标准的事实来源。
 - [开发目标与阶段门槛](docs/DEVELOPMENT_PLAN.md)：范围、模块边界、执行顺序、交付物及风险。
 - [Agent 开发规则](AGENTS.md)：代码与协作约束，每次开发前阅读。

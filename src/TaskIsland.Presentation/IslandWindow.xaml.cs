@@ -4,6 +4,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Microsoft.Win32;
 using TaskIsland.Application;
 using TaskIsland.WindowsIntegration;
@@ -19,6 +21,10 @@ public partial class IslandWindow : Window
     private readonly DispatcherTimer leaveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private HwndSource? source;
     private readonly IslandMotion motion;
+    private IslandPage displayedPage = IslandPage.Tasks;
+    private int pageGeneration;
+    public static readonly DependencyProperty IsCountdownRunningProperty = DependencyProperty.Register(nameof(IsCountdownRunning), typeof(bool), typeof(IslandWindow), new PropertyMetadata(false));
+    public bool IsCountdownRunning { get => (bool)GetValue(IsCountdownRunningProperty); private set => SetValue(IsCountdownRunningProperty, value); }
 
     public IslandWindow(NotificationService notifications)
     {
@@ -76,7 +82,26 @@ public partial class IslandWindow : Window
     private void OnPointerLeave(object sender, MouseEventArgs e) { enterTimer.Stop(); leaveTimer.Start(); }
     private void OnEmptyClick(object sender, MouseButtonEventArgs e) { if (model.Tasks.Count == 0) model.AddCommand.Execute(null); else OpenTasks(true); }
     private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
+    private void OnTasks(object sender, RoutedEventArgs e) => OpenTasks(true);
     private void OnArchive(object sender, RoutedEventArgs e) => OpenArchive();
+    private async void OnRenewClick(object sender, RoutedEventArgs e)
+    {
+        if (model.IsBusy) return;
+        if (sender is not Button { DataContext: TaskRowViewModel row }) return;
+        await model.RenewCommand.ExecuteAsync(row);
+        if (model.IsError) return;
+        ActiveList.UpdateLayout();
+        var current = model.Tasks.FirstOrDefault(x => x.Item.Id == row.Item.Id);
+        if (current is not null && ActiveList.ItemContainerGenerator.ContainerFromItem(current) is DependencyObject container)
+            FindHourglass(container)?.PulseRenewal();
+    }
+    private static HourglassControl? FindHourglass(DependencyObject parent)
+    {
+        if (parent is HourglassControl control) return control;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FindHourglass(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+        return null;
+    }
     private void OnBack(object sender, RoutedEventArgs e) { if (state.Page == IslandPage.Editor) model.CancelEditCommand.Execute(null); else OpenTasks(true); }
     private async void OnTaskRightClick(object sender, MouseButtonEventArgs e)
     { if (sender is FrameworkElement { DataContext: TaskRowViewModel row }) { e.Handled = true; await model.PinCommand.ExecuteAsync(row); } }
@@ -103,17 +128,43 @@ public partial class IslandWindow : Window
     private void RenderState()
     {
         var expanded = state.Page != IslandPage.Collapsed;
-        BackButton.Visibility = state.Page is IslandPage.Settings or IslandPage.Archive or IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
+        IsCountdownRunning = expanded && state.Page == IslandPage.Tasks && model.AnimationsEnabled && SystemParameters.ClientAreaAnimation;
+        BackButton.Visibility = state.Page == IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
         // Keep the outgoing page arranged until its parent has faded and the shape has closed.
         if (expanded)
         {
-            TasksPanel.Visibility = state.Page == IslandPage.Tasks ? Visibility.Visible : Visibility.Collapsed;
-            SettingsPanel.Visibility = state.Page == IslandPage.Settings ? Visibility.Visible : Visibility.Collapsed;
-            ArchivePanel.Visibility = state.Page == IslandPage.Archive ? Visibility.Visible : Visibility.Collapsed;
-            EditorPanel.Visibility = state.Page == IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
+            SwitchPage(state.Page);
         }
         var area = DesktopPlacement.PrimaryWorkAreaInDips(new WindowInteropHelper(this).Handle);
         motion.Transition(expanded, model.AnimationsEnabled && SystemParameters.ClientAreaAnimation, area, model.Anchor);
+    }
+
+    private void SwitchPage(IslandPage page)
+    {
+        FrameworkElement Panel(IslandPage p) => p switch { IslandPage.Settings => SettingsPanel, IslandPage.Archive => ArchivePanel, IslandPage.Editor => EditorViewport, _ => TasksPanel };
+        int Order(IslandPage p) => p switch { IslandPage.Archive => 1, IslandPage.Settings => 2, IslandPage.Editor => 3, _ => 0 };
+        var previous = displayedPage; displayedPage = page;
+        var generation = ++pageGeneration;
+        var incoming = Panel(page); var outgoing = Panel(previous);
+        foreach (var panel in new FrameworkElement[] { TasksPanel, ArchivePanel, SettingsPanel, EditorViewport })
+        {
+            if (panel.RenderTransform is not TranslateTransform) panel.RenderTransform = new TranslateTransform();
+            var transform = (TranslateTransform)panel.RenderTransform;
+            transform.BeginAnimation(TranslateTransform.XProperty, null); transform.X = 0;
+            panel.Visibility = panel == incoming ? Visibility.Visible : Visibility.Collapsed;
+        }
+        EditorPanel.Visibility = page == IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var (button, destination) in new[] { (TasksTab, IslandPage.Tasks), (ArchiveTab, IslandPage.Archive), (SettingsTab, IslandPage.Settings) })
+            button.Foreground = (Brush)FindResource(destination == page ? "IslandAccent" : "IslandMuted");
+        if (previous == page || !model.AnimationsEnabled || !SystemParameters.ClientAreaAnimation) return;
+        outgoing.Visibility = Visibility.Visible;
+        var direction = Order(page) > Order(previous) ? 1 : -1;
+        var duration = TimeSpan.FromMilliseconds(220);
+        DoubleAnimation Slide(double from, double to) => new(from, to, duration) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+        var entry = Slide(direction * 334, 0);
+        entry.Completed += (_, _) => { if (generation == pageGeneration) { outgoing.Visibility = Visibility.Collapsed; ((TranslateTransform)incoming.RenderTransform).BeginAnimation(TranslateTransform.XProperty, null); } };
+        ((TranslateTransform)outgoing.RenderTransform).BeginAnimation(TranslateTransform.XProperty, Slide(0, -direction * 334));
+        ((TranslateTransform)incoming.RenderTransform).BeginAnimation(TranslateTransform.XProperty, entry);
     }
 
     private void PositionWindow()

@@ -17,6 +17,13 @@ internal sealed class SqliteTaskSession(SqliteConnection db, SqliteTransaction t
     }
     public void SetPinnedTaskId(Guid? id)
     {
+        if (id is null)
+        {
+            // Absence represents no pin, including legacy Settings tables with NOT NULL values.
+            using var clear = Command("DELETE FROM Settings WHERE Key='PinnedTaskId'");
+            clear.ExecuteNonQuery();
+            return;
+        }
         using var command = Command("INSERT INTO Settings(Key,Value) VALUES('PinnedTaskId',$id) ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value", ("$id", id?.ToString()));
         command.ExecuteNonQuery();
     }

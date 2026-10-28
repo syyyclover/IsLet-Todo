@@ -27,6 +27,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(AddCommand))] public partial bool IsReady { get; set; }
     [ObservableProperty] public partial bool HasMoreArchives { get; set; }
     [ObservableProperty] public partial string EditorTimeDescription { get; set; } = "未设置结束时间";
+    public EditorTimeModel EditorTime { get; } = new();
     public ObservableCollection<TaskRowViewModel> Tasks { get; } = [];
     public ObservableCollection<TaskRowViewModel> ArchivedTasks { get; } = [];
     public async Task AttachAsync(TaskService taskService)
@@ -67,7 +68,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         if (service is null || IsBusy) return;
         if (editing) { NavigationRequested?.Invoke(IslandPage.Editor); return; }
         editingItem = null; editing = true; originalTitle = ""; EditorTitle = "";
-        EditorTimeDescription = "未设置结束时间 · 创建后保留 24 小时";
+        EditorTime.Reset(null);
         ConfirmDiscard = false; IsError = false; Status = "输入日程内容";
         NavigationRequested?.Invoke(IslandPage.Editor);
     }
@@ -75,18 +76,20 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     {
         if (service is null || IsBusy) return;
         editingItem = row.Item; editing = true; originalTitle = row.Title; EditorTitle = row.Title;
-        EditorTimeDescription = row.Item.DueAtUtc is { } due ? $"结束时间：{due.ToLocalTime():yyyy-MM-dd HH:mm}" : "未设置结束时间";
+        EditorTime.Reset(row.Item.DueAtUtc);
         ConfirmDiscard = false; IsError = false; Status = "编辑日程";
         NavigationRequested?.Invoke(IslandPage.Editor);
     }
     [RelayCommand] private Task SaveAsync() => RunAsync(async () =>
     {
         if (!editing) return;
+        if (!EditorTime.ValidateForSave()) { Status = EditorTime.Error; IsError = true; return; }
+        var submittedDue = EditorTime.ConfirmedDueAt;
         var submittedTitle = EditorTitle;
-        var saved = editingItem is null ? await service!.CreateTaskAsync(submittedTitle, null)
-            : await service!.UpdateTaskAsync(editingItem.Id, submittedTitle, editingItem.DueAtUtc);
+        var saved = editingItem is null ? await service!.CreateTaskAsync(submittedTitle, submittedDue)
+            : await service!.UpdateTaskAsync(editingItem.Id, submittedTitle, submittedDue);
         editingItem = saved; originalTitle = saved.Title;
-        if (EditorTitle != submittedTitle)
+        if (EditorTitle != submittedTitle || EditorTime.ConfirmedDueAt != submittedDue)
         {
             await ReloadAsync(); Status = "先前内容已保存，当前修改尚未保存";
             return;
@@ -98,7 +101,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     public bool TryLeaveEditor(IslandPage destination)
     {
         if (!editing || destination == IslandPage.Editor) return true;
-        if (EditorTitle != originalTitle) { discardDestination = destination; ConfirmDiscard = true; return false; }
+        if (EditorTitle != originalTitle || EditorTime.HasChanges) { discardDestination = destination; ConfirmDiscard = true; return false; }
         editing = false; ConfirmDiscard = false; return true;
     }
     [RelayCommand] private void CancelEdit()
@@ -119,7 +122,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     [RelayCommand] private Task PinAsync(TaskRowViewModel row) => RunAsync(async () =>
     { await service!.SetPinnedTaskAsync(row.IsPinned ? null : row.Item.Id); await ReloadAsync(); Status = row.IsPinned ? "已取消置顶" : "已置顶"; });
     [RelayCommand] private Task RenewAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.RenewArchiveAsync(row.Item.Id); await ReloadAsync(); Status = "已按当前时间重新计算保留期限"; });
+    { await service!.RenewArchiveAsync(row.Item.Id); await ReloadAsync(); Status = "已延长保留时间"; });
     [RelayCommand] private Task LoadMoreArchivesAsync() => RunAsync(async () =>
     {
         var page = await service!.ListArchivedAsync(ArchivedTasks.Count);

@@ -121,6 +121,42 @@ public sealed class DatabaseTests : IDisposable
         Assert.Equal(1L, Scalar(saved, "PRAGMA user_version"));
         Assert.Equal("保留旧日程", Scalar(saved, "SELECT title FROM tasks"));
     }
+    [Fact] public async Task LegacyNotNullSettingsAllowsCompletingAndRestoringOnlyPinnedTask()
+    {
+        Directory.CreateDirectory(root);
+        var id = Guid.NewGuid();
+        using (var db = Open()) Execute(db, $"""
+            CREATE TABLE tasks(id TEXT PRIMARY KEY,title TEXT NOT NULL,created_at_utc INTEGER NOT NULL,updated_at_utc INTEGER NOT NULL,due_at_utc INTEGER,archive_at_utc INTEGER NOT NULL,archived_at_utc INTEGER,archive_reason INTEGER,reminder_revision INTEGER NOT NULL);
+            CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+            CREATE TABLE reminder_deliveries(task_id TEXT NOT NULL,reminder_revision INTEGER NOT NULL,status INTEGER NOT NULL,attempt_count INTEGER NOT NULL,next_attempt_at_utc INTEGER,last_error TEXT,PRIMARY KEY(task_id,reminder_revision));
+            INSERT INTO tasks VALUES('{id}','旧版唯一置顶任务',1000,1000,NULL,9999999999999,NULL,NULL,1);
+            INSERT INTO settings VALUES('PinnedTaskId','{id}');
+            INSERT INTO settings VALUES('OtherSetting','preserved');
+            PRAGMA user_version=1;
+            """);
+        await using (var store = new SqliteTaskStore(root))
+        {
+            await store.InitializeAsync();
+            var service = new TaskIsland.Application.TaskService(store, new Microsoft.Extensions.Time.Testing.FakeTimeProvider(Now));
+            await service.ArchiveTaskAsync(id, ArchiveReason.Completed);
+            Assert.Empty((await service.ListActiveAsync()).Tasks);
+            Assert.Null((await service.ListActiveAsync()).PinnedTaskId);
+            Assert.Equal(ArchiveReason.Completed, Assert.Single(await service.ListArchivedAsync()).ArchiveReason);
+            await service.RestoreTaskAsync(id);
+            Assert.Equal(id, Assert.Single((await service.ListActiveAsync()).Tasks).Id);
+            Assert.Null((await service.ListActiveAsync()).PinnedTaskId);
+            await service.SetPinnedTaskAsync(id);
+            await service.SetPinnedTaskAsync(null);
+            await service.SetPinnedTaskAsync(null);
+        }
+        await using var reopened = new SqliteTaskStore(root);
+        await reopened.InitializeAsync();
+        Assert.Equal(id, Assert.Single(await reopened.ReadAsync(tx => tx.ListActive())).Id);
+        Assert.Null(await reopened.ReadAsync(tx => tx.GetPinnedTaskId()));
+        using var current = Open();
+        Assert.Equal("preserved", Scalar(current, "SELECT value FROM settings WHERE key='OtherSetting'"));
+        Assert.Equal(0L, Scalar(current, "SELECT COUNT(*) FROM settings WHERE key='PinnedTaskId'"));
+    }
     [Fact] public async Task DisposalDrainsAcceptedWrites()
     {
         var store = new SqliteTaskStore(root); await store.InitializeAsync();

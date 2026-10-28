@@ -152,6 +152,7 @@ public class TaskWorkflowTests : IAsyncLifetime
     {
         var directory = Environment.GetEnvironmentVariable("TASKISLAND_CAPTURE_DIR");
         if (string.IsNullOrEmpty(directory)) return;
+        IslandMotionTests.Pump(250);
         Directory.CreateDirectory(directory);
         window.UpdateLayout();
         var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(360, 295, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
@@ -159,6 +160,24 @@ public class TaskWorkflowTests : IAsyncLifetime
         var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
         encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
         using var file = File.Create(Path.Combine(directory, name + ".png")); encoder.Save(file);
+    }
+    [Fact] public void EditorTextAndTimePickerFitInsideIsland()
+    {
+        IslandMotionTests.RunSta(window =>
+        {
+            FinishOnDispatcher(window.AttachTasksAsync(new TaskService(store, TimeProvider.System)));
+            var vm = (IslandViewModel)window.DataContext;
+            vm.AddCommand.Execute(null); vm.EditorTitle = "明天下午整理工作清单 👩‍💻";
+            IslandMotionTests.Pump(300); window.UpdateLayout();
+            var input = (System.Windows.Controls.TextBox)window.FindName("TitleInput");
+            var host = (System.Windows.FrameworkElement)input.Template.FindName("PART_ContentHost", input);
+            Assert.True(host.ActualHeight >= input.FontSize * 1.25, $"Text host clipped: {host.ActualHeight}");
+            CaptureWindow(window, "editor-filled");
+            vm.EditorTime.OpenCommand.Execute(null); window.UpdateLayout();
+            Assert.False(input.IsVisible);
+            CaptureWindow(window, "time-wheel");
+            vm.EditorTime.ConfirmCommand.Execute(null); window.UpdateLayout(); Assert.True(input.IsVisible);
+        });
     }
     private static void FinishOnDispatcher(Task task)
     {
