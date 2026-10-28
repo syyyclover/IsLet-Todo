@@ -168,7 +168,7 @@ public class IslandMotionTests(ITestOutputHelper output)
         Assert.Equal(0, content.Opacity);
     });
 
-    private static void RunSta(Action<IslandWindow> check)
+    internal static void RunSta(Action<IslandWindow> check)
     {
         Exception? failure = null;
         var thread = new Thread(() =>
@@ -176,6 +176,7 @@ public class IslandMotionTests(ITestOutputHelper output)
             IslandWindow? window = null;
             try
             {
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
                 window = new IslandWindow(new NotificationService());
                 window.Show();
                 Pump(300);
@@ -196,7 +197,7 @@ public class IslandMotionTests(ITestOutputHelper output)
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
-    private static void Pump(int milliseconds)
+    internal static void Pump(int milliseconds)
     {
         var frame = new DispatcherFrame();
         var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(milliseconds) };

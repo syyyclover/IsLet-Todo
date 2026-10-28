@@ -6,6 +6,7 @@ public enum ReminderStatus { Pending, Submitted, Failed, Skipped }
 public sealed record ReminderDelivery(Guid TaskId, int Revision, ReminderStatus Status, int Attempts,
     DateTimeOffset? NextAttemptAtUtc, string? LastError);
 public sealed record ActiveTaskList(IReadOnlyList<TaskItem> Tasks, Guid? PinnedTaskId);
+public sealed record TaskOverview(ActiveTaskList Active, IReadOnlyList<TaskItem> Archived);
 
 public interface ITaskReader
 {

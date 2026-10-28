@@ -26,6 +26,7 @@ public partial class IslandWindow : Window
         motion = new IslandMotion(this, IslandSurface, IslandClip, HeaderOffset, ContentPanel, ContentOffset, PositionWindow);
         this.notifications = notifications;
         DataContext = model;
+        model.NavigationRequested += page => Navigate(page, true);
         model.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(IslandViewModel.AnimationsEnabled) && new WindowInteropHelper(this).Handle != 0)
@@ -48,6 +49,7 @@ public partial class IslandWindow : Window
             enterTimer.Stop(); leaveTimer.Stop(); source?.RemoveHook(WindowMessages);
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
+            model.Dispose();
             System.Windows.Application.Current?.Shutdown();
         };
 #if DEBUG
@@ -57,16 +59,26 @@ public partial class IslandWindow : Window
 #endif
     }
 
-    public void OpenTasks(bool focus) { state.Navigate(IslandPage.Tasks); RenderState(); if (focus) Activate(); }
-    public void OpenSettings() { state.Navigate(IslandPage.Settings); RenderState(); Activate(); }
-    public void OpenArchive() { state.Navigate(IslandPage.Archive); RenderState(); Activate(); }
+    public Task AttachTasksAsync(TaskService service) => model.AttachAsync(service);
+    public void OpenTasks(bool focus) => Navigate(IslandPage.Tasks, focus);
+    public void OpenSettings() => Navigate(IslandPage.Settings, true);
+    public void OpenArchive() => Navigate(IslandPage.Archive, true);
+    private void Navigate(IslandPage page, bool focus)
+    {
+        if (!model.TryLeaveEditor(page)) { if (focus) Activate(); return; }
+        state.Navigate(page); RenderState();
+        if (focus) Activate();
+        if (page == IslandPage.Editor) Dispatcher.BeginInvoke(() => TitleInput.Focus(), DispatcherPriority.Input);
+    }
     public void ShowStatus(string message) { model.Status = message; }
     private void OnPointerEnter(object sender, MouseEventArgs e) { leaveTimer.Stop(); if (state.Page == IslandPage.Collapsed) enterTimer.Start(); }
     private void OnPointerLeave(object sender, MouseEventArgs e) { enterTimer.Stop(); leaveTimer.Start(); }
-    private void OnEmptyClick(object sender, MouseButtonEventArgs e) { OpenTasks(true); ShowStatus("添加日程将在任务阶段接入。"); }
+    private void OnEmptyClick(object sender, MouseButtonEventArgs e) { if (model.Tasks.Count == 0) model.AddCommand.Execute(null); else OpenTasks(true); }
     private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
     private void OnArchive(object sender, RoutedEventArgs e) => OpenArchive();
-    private void OnBack(object sender, RoutedEventArgs e) => OpenTasks(true);
+    private void OnBack(object sender, RoutedEventArgs e) { if (state.Page == IslandPage.Editor) model.CancelEditCommand.Execute(null); else OpenTasks(true); }
+    private async void OnTaskRightClick(object sender, MouseButtonEventArgs e)
+    { if (sender is FrameworkElement { DataContext: TaskRowViewModel row }) { e.Handled = true; await model.PinCommand.ExecuteAsync(row); } }
     private void OnAnchor(object sender, RoutedEventArgs e)
     {
         model.Anchor = Enum.Parse<IslandAnchor>((string)((Button)sender).Tag);
@@ -75,6 +87,7 @@ public partial class IslandWindow : Window
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
+        if (state.Page == IslandPage.Editor) { model.CancelEditCommand.Execute(null); e.Handled = true; return; }
         state.Navigate(state.Page is IslandPage.Settings or IslandPage.Archive ? IslandPage.Tasks : IslandPage.Collapsed);
         RenderState(); e.Handled = true;
     }
@@ -89,13 +102,14 @@ public partial class IslandWindow : Window
     private void RenderState()
     {
         var expanded = state.Page != IslandPage.Collapsed;
-        BackButton.Visibility = state.Page is IslandPage.Settings or IslandPage.Archive ? Visibility.Visible : Visibility.Collapsed;
+        BackButton.Visibility = state.Page is IslandPage.Settings or IslandPage.Archive or IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
         // Keep the outgoing page arranged until its parent has faded and the shape has closed.
         if (expanded)
         {
             TasksPanel.Visibility = state.Page == IslandPage.Tasks ? Visibility.Visible : Visibility.Collapsed;
             SettingsPanel.Visibility = state.Page == IslandPage.Settings ? Visibility.Visible : Visibility.Collapsed;
             ArchivePanel.Visibility = state.Page == IslandPage.Archive ? Visibility.Visible : Visibility.Collapsed;
+            EditorPanel.Visibility = state.Page == IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
         }
         var area = DesktopPlacement.PrimaryWorkAreaInDips(new WindowInteropHelper(this).Handle);
         motion.Transition(expanded, model.AnimationsEnabled && SystemParameters.ClientAreaAnimation, area, model.Anchor);

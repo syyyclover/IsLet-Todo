@@ -11,5 +11,6 @@
   <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.4" />
   <ProjectReference Include="../TaskIsland.WindowsIntegration/TaskIsland.WindowsIntegration.csproj" />
+  <ProjectReference Include="../TaskIsland.Infrastructure/TaskIsland.Infrastructure.csproj" />
  </ItemGroup>
 </Project>

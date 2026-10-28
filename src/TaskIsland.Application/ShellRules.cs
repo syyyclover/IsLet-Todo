@@ -1,7 +1,7 @@
 namespace TaskIsland.Application;
 
 public enum IslandAnchor { Left, Center, Right }
-public enum IslandPage { Collapsed, Tasks, Settings, Archive }
+public enum IslandPage { Collapsed, Tasks, Settings, Archive, Editor }
 public readonly record struct WorkArea(double X, double Y, double Width, double Height);
 public readonly record struct IslandBounds(double X, double Y, double Width, double Height);
 public static class IslandPlacement

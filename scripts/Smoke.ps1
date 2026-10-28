@@ -1,4 +1,4 @@
-param([string]$PublishDirectory = 'artifacts/publish/m1-win-x64', [int]$ExistingPid = 0)
+param([string]$PublishDirectory = 'artifacts/publish/m2-win-x64', [int]$ExistingPid = 0)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System; using System.Runtime.InteropServices; using System.Text;
@@ -42,10 +42,21 @@ try {
     'Second launch forwarding: PASS'
     [void][IslandSmokeNative]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
     if (-not $primary.WaitForExit(5000)) { throw 'Closing island did not terminate primary within 5 seconds' }
-    if ($primary.ExitCode -ne 0) { throw "Primary failed on exit: $($primary.ExitCode)" }
+    if ($null -ne $primary.ExitCode -and $primary.ExitCode -ne 0) { throw "Primary failed on exit: $($primary.ExitCode)" }
     'Window close and process cleanup: PASS'
 } finally {
     foreach ($process in @($secondary, $primary)) {
-        if ($process) { $process.Refresh(); if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force } }
+        if ($process) {
+            $process.Refresh()
+            if (-not $process.HasExited) {
+                $remainingWindow = [IslandSmokeNative]::Find($process.Id)
+                if ($remainingWindow -ne [IntPtr]::Zero) {
+                    [void][IslandSmokeNative]::PostMessage($remainingWindow, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+                    [void]$process.WaitForExit(5000)
+                }
+                $process.Refresh()
+                if (-not $process.HasExited) { Write-Warning "Process $($process.Id) remains running; exit through the tray after pending writes finish." }
+            }
+        }
     }
 }

@@ -88,6 +88,12 @@
         }
       },
       "taskisland.application": {
+        "type": "Project",
+        "dependencies": {
+          "TaskIsland.Domain": "[1.0.0, )"
+        }
+      },
+      "taskisland.domain": {
         "type": "Project"
       }
     },

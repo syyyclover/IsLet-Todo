@@ -9,5 +9,6 @@
   <PackageReference Include="xunit" Version="2.9.3" />
   <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" PrivateAssets="all" />
   <ProjectReference Include="../../src/TaskIsland.Presentation/TaskIsland.Presentation.csproj" />
+  <ProjectReference Include="../../src/TaskIsland.Infrastructure/TaskIsland.Infrastructure.csproj" />
  </ItemGroup>
 </Project>

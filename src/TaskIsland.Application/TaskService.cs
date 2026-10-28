@@ -16,6 +16,8 @@ public sealed class TaskService(ITaskStore store, TimeProvider clock)
     }, ct);
     public Task<ActiveTaskList> ListActiveAsync(CancellationToken ct = default) => store.ReadAsync(tx =>
     { var pin = tx.GetPinnedTaskId(); return new ActiveTaskList(TaskRules.Sort(tx.ListActive(), pin), pin); }, ct);
+    public Task<TaskOverview> ReadOverviewAsync(CancellationToken ct = default) => store.ReadAsync(tx =>
+    { var pin = tx.GetPinnedTaskId(); return new TaskOverview(new(TaskRules.Sort(tx.ListActive(), pin), pin), tx.ListArchived(0, 50)); }, ct);
     public Task<IReadOnlyList<TaskItem>> ListArchivedAsync(int skip = 0, int take = 50, CancellationToken ct = default)
     {
         if (skip < 0 || take is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(take));

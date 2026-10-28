@@ -4,6 +4,9 @@ using System.Windows;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
 using TaskIsland.WindowsIntegration;
+using TaskIsland.Infrastructure;
+using TaskIsland.Application;
+using Microsoft.Win32;
 
 namespace TaskIsland.Presentation;
 
@@ -13,6 +16,8 @@ public partial class App : System.Windows.Application
     private NotificationService? notifications;
     private TrayService? tray;
     private IslandWindow? island;
+    private SqliteTaskStore? taskStore;
+    private TaskIsland.Application.TaskScheduler? scheduler;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -68,12 +73,24 @@ public partial class App : System.Windows.Application
             island.Show();
             WriteEvent($"startup.window {startupWatch.ElapsedMilliseconds}ms");
             if (argument != "show") HandleActivation(argument);
+            taskStore = new SqliteTaskStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TaskIsland"));
+            await taskStore.InitializeAsync();
+            if (Dispatcher.HasShutdownStarted) return;
+            var taskService = new TaskService(taskStore, TimeProvider.System);
+            await taskService.ReconcileTimeAsync();
+            await island.AttachTasksAsync(taskService);
+            if (Dispatcher.HasShutdownStarted) return;
+            scheduler = new(taskService, TimeProvider.System);
+            scheduler.Failed += ex => Dispatcher.BeginInvoke(() => { WriteDiagnostic("scheduler", ex); island.ShowStatus("时间校准暂时失败，将在下次校准时重试。"); });
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            SystemEvents.TimeChanged += OnSystemTimeChanged;
+            scheduler.Start();
         }
         catch (Exception ex)
         {
             WriteDiagnostic("startup", ex);
             // Keep feedback in the island if the main window was already created.
-            if (island is not null) island.ShowStatus("启动集成失败，请查看日志后重试。");
+            if (island is not null) island.ShowStatus("本地日程加载失败，原数据已保留。请检查日志并重启。");
             else Shutdown(1);
         }
     }
@@ -114,9 +131,15 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        SystemEvents.TimeChanged -= OnSystemTimeChanged;
         tray?.Dispose();
         instance?.Dispose();
+        try { scheduler?.DisposeAsync().AsTask().GetAwaiter().GetResult(); taskStore?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        catch (Exception ex) { WriteDiagnostic("data-shutdown", ex); }
         try { notifications?.Dispose(); } catch (Exception ex) { WriteDiagnostic("notification-unregister", ex); }
         base.OnExit(e);
     }
+    private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e) { if (e.Mode == PowerModes.Resume) scheduler?.RequestReconcile(); }
+    private void OnSystemTimeChanged(object? sender, EventArgs e) => scheduler?.RequestReconcile();
 }
