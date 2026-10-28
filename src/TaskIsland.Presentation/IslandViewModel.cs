@@ -14,6 +14,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     private bool editing, disposed;
     private int reloadGeneration;
     private int refreshPending;
+    private bool addAfterBusy;
     private IslandPage discardDestination = IslandPage.Tasks;
     public event Action<IslandPage>? NavigationRequested;
     [ObservableProperty] public partial string Status { get; set; } = "正在准备本地日程…";
@@ -23,7 +24,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string FeaturedTitle { get; set; } = "暂无日程";
     [ObservableProperty] public partial bool ConfirmDiscard { get; set; }
     [ObservableProperty] public partial bool IsError { get; set; }
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(AddCommand))] public partial bool IsBusy { get; set; }
+    [ObservableProperty] public partial bool IsBusy { get; set; }
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(AddCommand))] public partial bool IsReady { get; set; }
     [ObservableProperty] public partial bool HasMoreArchives { get; set; }
     [ObservableProperty] public partial string EditorTimeDescription { get; set; } = "未设置结束时间";
@@ -34,6 +35,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     {
         if (service is not null) service.Changed -= OnChanged;
         service = taskService; service.Changed += OnChanged;
+        IsReady = false; IsError = false;
         await ReloadAsync();
         IsReady = !IsError;
         if (!IsError) Status = Tasks.Count == 0 ? "添加第一条日程吧" : $"{Tasks.Count} 条活跃日程";
@@ -47,12 +49,24 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         {
             var overview = await service.ReadOverviewAsync();
             if (disposed || generation != reloadGeneration) return;
-            Tasks.Clear(); foreach (var item in overview.Active.Tasks) Tasks.Add(new(item, item.Id == overview.Active.PinnedTaskId));
-            ArchivedTasks.Clear(); foreach (var item in overview.Archived) ArchivedTasks.Add(new(item, false));
+            SyncRows(Tasks, overview.Active.Tasks.Select(item => new TaskRowViewModel(item, item.Id == overview.Active.PinnedTaskId)).ToArray());
+            SyncRows(ArchivedTasks, overview.Archived.Select(item => new TaskRowViewModel(item, false)).ToArray());
             HasMoreArchives = overview.Archived.Count == 50;
             FeaturedTitle = Tasks.FirstOrDefault()?.Summary ?? "暂无日程";
         }
         catch (Exception ex) when (!disposed) { ShowFailure(ex); }
+    }
+    private static void SyncRows(ObservableCollection<TaskRowViewModel> rows, IReadOnlyList<TaskRowViewModel> desired)
+    {
+        var ids = desired.Select(x => x.Item.Id).ToHashSet();
+        for (var i = rows.Count - 1; i >= 0; i--) if (!ids.Contains(rows[i].Item.Id)) rows.RemoveAt(i);
+        for (var i = 0; i < desired.Count; i++)
+        {
+            var index = -1;
+            for (var j = i; j < rows.Count; j++) if (rows[j].Item.Id == desired[i].Item.Id) { index = j; break; }
+            if (index < 0) rows.Insert(i, desired[i]);
+            else { if (index != i) rows.Move(index, i); if (rows[i] != desired[i]) rows[i] = desired[i]; }
+        }
     }
     private void OnChanged()
     {
@@ -62,10 +76,11 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         if (context is not null) context.Post(state => { if (!disposed && !IsBusy) _ = ReloadAsync(); }, null);
         else _ = ReloadAsync();
     }
-    private bool CanAdd() => IsReady && !IsBusy;
+    private bool CanAdd() => IsReady;
     [RelayCommand(CanExecute = nameof(CanAdd))] private void Add()
     {
-        if (service is null || IsBusy) return;
+        if (service is null) return;
+        if (IsBusy) { addAfterBusy = true; return; }
         if (editing) { NavigationRequested?.Invoke(IslandPage.Editor); return; }
         editingItem = null; editing = true; originalTitle = ""; EditorTitle = "";
         EditorTime.Reset(null);
@@ -139,6 +154,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         {
             IsBusy = false;
             if (Interlocked.Exchange(ref refreshPending, 0) != 0) await ReloadAsync();
+            if (addAfterBusy && !disposed) { addAfterBusy = false; Add(); }
         }
     }
     private void ShowFailure(Exception ex)

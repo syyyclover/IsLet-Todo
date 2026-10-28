@@ -30,7 +30,13 @@ public class TaskWorkflowTests : IAsyncLifetime
         Assert.False(cold.AddCommand.CanExecute(null));
         await cold.AttachAsync(new TaskService(store, TimeProvider.System));
         Assert.True(cold.AddCommand.CanExecute(null));
-        cold.IsBusy = true; Assert.False(cold.AddCommand.CanExecute(null));
+        cold.IsBusy = true; Assert.True(cold.AddCommand.CanExecute(null));
+    }
+    [Fact] public async Task OptionalCapabilityErrorDoesNotBlockLoadedTasks()
+    {
+        using var cold = new IslandViewModel { IsError = true, Status = "全屏检测不可用" };
+        await cold.AttachAsync(new TaskService(store, TimeProvider.System));
+        Assert.True(cold.IsReady); Assert.True(cold.AddCommand.CanExecute(null));
     }
     [Fact] public async Task SaveFailureKeepsInputAndEditorState()
     {
@@ -102,6 +108,29 @@ public class TaskWorkflowTests : IAsyncLifetime
             if (PauseWrites) { PauseWrites = false; Entered.TrySetResult(); await Release.Task.WaitAsync(ct); }
             return await inner.WriteAsync(write, ct);
         }
+    }
+    [Theory] [InlineData("renew")] [InlineData("complete")] [InlineData("archive")]
+    public void TaskOperationsKeepAddButtonStableAndQueueRequestedEditor(string operation)
+    {
+        var paused = new PausedStore(store); var service = new TaskService(paused, TimeProvider.System);
+        IslandMotionTests.RunSta(window =>
+        {
+            FinishOnDispatcher(service.CreateTaskAsync("入口保持稳定", null));
+            FinishOnDispatcher(window.AttachTasksAsync(service)); window.OpenTasks(false); IslandMotionTests.Pump(300);
+            var vm = (IslandViewModel)window.DataContext; var row = Assert.Single(vm.Tasks);
+            var add = (System.Windows.Controls.Button)window.FindName("AddTaskButton");
+            var changes = 0; var resets = 0;
+            add.IsEnabledChanged += (_, _) => changes++;
+            vm.Tasks.CollectionChanged += (_, e) => { if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) resets++; };
+            paused.PauseWrites = true;
+            var task = operation switch { "renew" => vm.RenewCommand.ExecuteAsync(row), "complete" => vm.CompleteCommand.ExecuteAsync(row), _ => vm.ArchiveCommand.ExecuteAsync(row) };
+            FinishOnDispatcher(paused.Entered.Task);
+            Assert.True(add.IsEnabled); vm.AddCommand.Execute(null);
+            paused.Release.SetResult(); FinishOnDispatcher(task);
+            Assert.Equal(0, changes); Assert.Equal(0, resets);
+            Assert.Equal(System.Windows.Visibility.Visible, ((System.Windows.FrameworkElement)window.FindName("EditorPanel")).Visibility);
+            Assert.False(vm.IsError);
+        });
     }
     [Fact] public void RenderedIslandCanSaveAndProtectDirtyEditor()
     {
