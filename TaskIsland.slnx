@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TaskIsland.Application/TaskIsland.Application.csproj" />
+    <Project Path="src/TaskIsland.Presentation/TaskIsland.Presentation.csproj" />
+    <Project Path="src/TaskIsland.WindowsIntegration/TaskIsland.WindowsIntegration.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TaskIsland.Application.Tests/TaskIsland.Application.Tests.csproj" />
+    <Project Path="tests/TaskIsland.WindowsIntegration.Tests/TaskIsland.WindowsIntegration.Tests.csproj" />
+  </Folder>
+</Solution>

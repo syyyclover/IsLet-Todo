@@ -1,4 +1,5 @@
 # .NET / IDE
+.tools/
 **/bin/
 **/obj/
 .vs/
