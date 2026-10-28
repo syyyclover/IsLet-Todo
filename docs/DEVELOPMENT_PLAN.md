@@ -36,7 +36,7 @@
 
 - [x] 阅读并保留需求基线，建立 README、开发路线及 Agent 规则。
 - [x] 配置忽略规则与文本规范，初始化 Git 并连接指定 SSH 远程。
-- [ ] 检查远程历史后创建初始提交并同步，验证本地与远程提交一致。
+- [x] 检查远程历史后创建初始提交并同步，验证本地与远程提交一致。
 
 ### M1：窗口、系统集成与发布可行性
 
@@ -104,5 +104,6 @@
 - Git SSH 远程查询已成功，初次查询没有返回 refs，远程尚无分支。
 - 本地已初始化 `main`，`origin` 指向 `git@github.com:syyyclover/IsLet-Todo.git`；首次文档提交为 `595a5f9`。
 - Markdown 本地链接检查和 `git diff --cached --check` 已通过；原始需求文档未修改，保留其 Markdown 双空格换行。
-- `git push -u origin main` 两次未能启动：自动权限审批超时。尚未推送或建立上游跟踪，M0 的同步项保持未完成；需获准执行推送后核对远程提交。
+- 初次推送因自动权限审批超时未启动；用户再次授权后，`git push -u origin main` 已成功，建立 `main` 对 `origin/main` 的跟踪。
+- 同步后执行 `git rev-parse HEAD` 与 `git ls-remote origin refs/heads/main`，二者均为 `7365bd65bfe36ef32801c1452345b20adfd3b338`。此为本条记录更新前的同步检查点；记录更新提交后需再次核对。
 - 应用构建、自动化测试、Windows 人工验收及性能测量：未执行，尚无应用实现。
