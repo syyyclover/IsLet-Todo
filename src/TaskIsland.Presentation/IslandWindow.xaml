@@ -15,7 +15,11 @@
    </Grid>
    <StackPanel x:Name="ContentPanel" Canvas.Left="12" Canvas.Top="45" Width="334" Visibility="Hidden" Opacity="0">
     <StackPanel.RenderTransform><TranslateTransform x:Name="ContentOffset" Y="8"/></StackPanel.RenderTransform>
-    <StackPanel x:Name="PageTabs" Orientation="Horizontal" Margin="0,0,0,6"><local:DoubleConfirmButton ConfirmationRequired="{Binding HasUnsavedChanges}" x:Name="TasksTab" Content="日程" Style="{StaticResource QuietButton}" Click="OnTasks"/><local:DoubleConfirmButton ConfirmationRequired="{Binding HasUnsavedChanges}" x:Name="ArchiveTab" Content="归档" Style="{StaticResource QuietButton}" Click="OnArchive"/><local:DoubleConfirmButton ConfirmationRequired="{Binding HasUnsavedChanges}" x:Name="SettingsTab" Content="设置" Style="{StaticResource QuietButton}" Click="OnSettings"/></StackPanel>
+    <StackPanel x:Name="PageTabs" Orientation="Horizontal" Margin="0,0,0,6">
+     <Button x:Name="TasksTab" Content="日程" Style="{StaticResource QuietButton}" MouseEnter="OnPageTabEnter" Click="OnPageTabClick"/>
+     <Button x:Name="ArchiveTab" Content="归档" Style="{StaticResource QuietButton}" MouseEnter="OnPageTabEnter" Click="OnPageTabClick"/>
+     <Button x:Name="SettingsTab" Content="设置" Style="{StaticResource QuietButton}" MouseEnter="OnPageTabEnter" Click="OnPageTabClick"/>
+    </StackPanel>
     <Grid x:Name="PageDeck" Height="174" ClipToBounds="True">
      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
      <Border x:Name="ErrorBanner" Grid.Row="0" Visibility="{Binding IsError, Converter={StaticResource BoolVisibility}}" Background="#48272D" CornerRadius="8" Padding="8,5" Margin="3,0,3,5">

@@ -240,9 +240,17 @@ public partial class IslandWindow : Window
         CollapseToTasks();
     }
     private void OnEmptyClick(object sender, MouseButtonEventArgs e) { if (model.Tasks.Count == 0) model.AddCommand.Execute(null); else OpenTasks(true); }
-    private void OnSettings(object sender, RoutedEventArgs e) { model.DiscardDraft(); OpenSettings(); }
-    private void OnTasks(object sender, RoutedEventArgs e) { model.DiscardDraft(); OpenTasks(true); }
-    private void OnArchive(object sender, RoutedEventArgs e) { model.DiscardDraft(); OpenArchive(); }
+    private void OnPageTabEnter(object sender, MouseEventArgs e) => SelectPeerPage(sender);
+    private void OnPageTabClick(object sender, RoutedEventArgs e) => SelectPeerPage(sender);
+    private void SelectPeerPage(object sender)
+    {
+        if (state.Page == IslandPage.Collapsed || dragTracker.IsEnabled) return;
+        var page = ReferenceEquals(sender, ArchiveTab) ? IslandPage.Archive
+            : ReferenceEquals(sender, SettingsTab) ? IslandPage.Settings : IslandPage.Tasks;
+        if (state.Page == page) return;
+        // Page browsing preserves the editor draft and never activates the window.
+        state.Navigate(page); RenderState();
+    }
     private async void OnRenewClick(object sender, RoutedEventArgs e)
     {
         if (model.IsBusy) return;
