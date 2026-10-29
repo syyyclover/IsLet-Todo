@@ -22,18 +22,19 @@ public class ShellRulesTests
         Assert.True(result.Y >= 50 && result.Y + result.Height <= 230);
     }
 
-    [Fact]
-    public void LeavingProtectedPageDoesNotCollapseIt()
+    [Theory]
+    [InlineData(IslandPage.Tasks)]
+    [InlineData(IslandPage.Settings)]
+    [InlineData(IslandPage.Archive)]
+    [InlineData(IslandPage.Editor)]
+    [InlineData(IslandPage.Attachments)]
+    public void EveryExpandedPageCollapsesOnPointerLeave(IslandPage page)
     {
         var state = new IslandState();
-        state.Navigate(IslandPage.Settings);
-        state.CollapseAfterPointerLeave();
-        Assert.Equal(IslandPage.Settings, state.Page);
-        state.Navigate(IslandPage.Tasks);
+        state.Navigate(page);
         state.CollapseAfterPointerLeave();
         Assert.Equal(IslandPage.Collapsed, state.Page);
     }
-
     [Theory]
     [InlineData("", false)]
     [InlineData("task=garbage", false)]
@@ -43,5 +44,38 @@ public class ShellRulesTests
     public void NotificationArgumentsAreStrictlyValidated(string input, bool valid)
     {
         Assert.Equal(valid, ActivationRequest.Parse(input).TaskId.HasValue);
+    }
+
+    [Theory]
+    [InlineData(IslandPage.Tasks)]
+    [InlineData(IslandPage.Settings)]
+    [InlineData(IslandPage.Archive)]
+    [InlineData(IslandPage.Editor)]
+    [InlineData(IslandPage.Attachments)]
+    public void PointerReentryAlwaysOpensTasksAfterLeavingAnyPage(IslandPage page)
+    {
+        var state = new IslandState();
+        state.Navigate(page);
+        state.CollapseAfterPointerLeave();
+        state.CollapseAfterPointerLeave();
+        state.ExpandAfterPointerEnter();
+        Assert.Equal(IslandPage.Tasks, state.Page);
+        state.ExpandAfterPointerEnter();
+        Assert.Equal(IslandPage.Tasks, state.Page);
+    }
+
+    [Fact]
+    public void InitialHoverAndExplicitCollapseAlwaysOpenTasks()
+    {
+        var state = new IslandState();
+        Assert.Equal(IslandPage.Collapsed, state.Page);
+        state.CollapseAfterPointerLeave();
+        state.ExpandAfterPointerEnter();
+        Assert.Equal(IslandPage.Tasks, state.Page);
+        state.Navigate(IslandPage.Editor);
+        state.Navigate(IslandPage.Tasks);
+        state.Navigate(IslandPage.Collapsed);
+        state.ExpandAfterPointerEnter();
+        Assert.Equal(IslandPage.Tasks, state.Page);
     }
 }

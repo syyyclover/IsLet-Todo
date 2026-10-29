@@ -17,6 +17,17 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     private bool addAfterBusy;
     private IslandPage discardDestination = IslandPage.Tasks;
     public event Action<IslandPage>? NavigationRequested;
+    public IslandViewModel() { EditorTime.PropertyChanged += (_, _) => OnPropertyChanged(nameof(HasUnsavedChanges)); }
+    public bool HasUnsavedChanges => editing && (EditorTitle != originalTitle || EditorTime.HasChanges);
+    partial void OnEditorTitleChanged(string value) => OnPropertyChanged(nameof(HasUnsavedChanges));
+    public void DiscardDraft()
+    {
+        if (IsBusy) return;
+        editing = false; ConfirmDiscard = false; EditorTitle = ""; EditorTime.Reset(null);
+        OnPropertyChanged(nameof(HasUnsavedChanges));
+    }
+    [RelayCommand] private void LeaveEditor()
+    { if (!IsBusy) { DiscardDraft(); NavigationRequested?.Invoke(IslandPage.Tasks); } }
     public event Func<Guid?, OperationCue, Task>? FeedbackRequested;
     private async Task FeedbackAsync(Guid? id, OperationCue cue)
     {
@@ -99,6 +110,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     [RelayCommand] private void Edit(TaskRowViewModel row)
     {
         if (service is null || IsBusy) return;
+        if (HasUnsavedChanges) { NavigationRequested?.Invoke(IslandPage.Editor); return; }
         editingItem = row.Item; editing = true; originalTitle = row.Title; EditorTitle = row.Title;
         EditorTime.Reset(row.Item.DueAtUtc);
         ConfirmDiscard = false; IsError = false; Status = "编辑日程";
@@ -139,9 +151,14 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         NavigationRequested?.Invoke(discardDestination);
     }
     [RelayCommand] private Task CompleteAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Completed); await FeedbackAsync(row.Item.Id, OperationCue.Complete); await ReloadAsync(); Status = "已完成并归档"; });
+    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Completed); await FeedbackAsync(row.Item.Id, OperationCue.Complete); await ReloadAsync(); await CleanupArchivedAttachmentsAsync(); Status = "已完成并归档"; });
     [RelayCommand] private Task ArchiveAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Manual); await FeedbackAsync(row.Item.Id, OperationCue.Archive); await ReloadAsync(); Status = "已归档"; });
+    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Manual); await FeedbackAsync(row.Item.Id, OperationCue.Archive); await ReloadAsync(); await CleanupArchivedAttachmentsAsync(); Status = "已归档"; });
+    private async Task CleanupArchivedAttachmentsAsync()
+    {
+        if (attachmentService is not null && !await attachmentService.RetryCleanupAsync())
+        { IsError = true; ErrorMessage = "附件副本暂时无法清理，将自动重试"; }
+    }
     [RelayCommand] private Task RestoreAsync(TaskRowViewModel row) => RunAsync(async () =>
     { await service!.RestoreTaskAsync(row.Item.Id); await FeedbackAsync(row.Item.Id, OperationCue.Restore); await ReloadAsync(); Status = "已恢复"; });
     [RelayCommand] private Task PinAsync(TaskRowViewModel row) => RunAsync(async () =>

@@ -89,6 +89,7 @@ public sealed class TaskService(ITaskStore store, TimeProvider clock, TaskMutati
     private static void Archive(ITaskWriter tx, TaskItem item, ArchiveReason reason, DateTimeOffset now)
     {
         tx.Save(TaskRules.Archive(item, reason, now)); tx.SkipUnsubmittedReminders(item.Id);
+        foreach (var attachment in tx.ListAttachments(item.Id)) tx.RemoveAttachment(attachment.Id);
         if (tx.GetPinnedTaskId() == item.Id) tx.SetPinnedTaskId(null);
     }
 }

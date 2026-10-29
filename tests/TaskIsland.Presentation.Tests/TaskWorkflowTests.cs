@@ -24,6 +24,18 @@ public class TaskWorkflowTests : IAsyncLifetime
         await model.RestoreCommand.ExecuteAsync(model.ArchivedTasks[0]);
         Assert.Single(model.Tasks); Assert.Empty(model.ArchivedTasks);
     }
+    [Fact] public async Task EditingAnotherRowDoesNotOverwriteBackgroundDraft()
+    {
+        model.AddCommand.Execute(null); model.EditorTitle = "已有日程";
+        await model.SaveCommand.ExecuteAsync(null);
+        model.AddCommand.Execute(null); model.EditorTitle = "后台草稿";
+        model.EditCommand.Execute(model.Tasks[0]);
+        Assert.Equal("后台草稿", model.EditorTitle);
+        await model.SaveCommand.ExecuteAsync(null);
+        Assert.Equal(2, model.Tasks.Count);
+        Assert.Contains(model.Tasks, row => row.Title == "已有日程");
+        Assert.Contains(model.Tasks, row => row.Title == "后台草稿");
+    }
     [Fact] public async Task AddIsUnavailableUntilStorageHasLoaded()
     {
         using var cold = new IslandViewModel();

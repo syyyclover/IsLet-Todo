@@ -10,6 +10,16 @@ public partial class IslandViewModel
     [ObservableProperty] public partial bool ConfirmDelete { get; set; }
     [ObservableProperty] public partial string DeletePrompt { get; set; } = "";
 
+    [RelayCommand] private async Task DeleteArchivedAsync(TaskRowViewModel row)
+    {
+        if(IsBusy || row.Item.ArchivedAtUtc is null)return;
+        RequestDelete(row);try{await ConfirmDeleteAsync();}finally{ConfirmDelete=false;deleteTaskId=null;deleteAll=false;}
+    }
+    [RelayCommand] private async Task DeleteAllArchivedAsync()
+    {
+        if(IsBusy || ArchivedTasks.Count==0)return;
+        RequestDeleteAll();try{await ConfirmDeleteAsync();}finally{ConfirmDelete=false;deleteTaskId=null;deleteAll=false;}
+    }
     [RelayCommand] private void RequestDelete(TaskRowViewModel row)
     {
         if (IsBusy || service is null || row.Item.ArchivedAtUtc is null) return;

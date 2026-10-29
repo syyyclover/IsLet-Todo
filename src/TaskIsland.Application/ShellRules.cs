@@ -23,11 +23,9 @@ public static class IslandPlacement
 public sealed class IslandState
 {
     public IslandPage Page { get; private set; }
+    public void ExpandAfterPointerEnter() => Page = IslandPage.Tasks;
     public void Navigate(IslandPage page) => Page = page;
-    public void CollapseAfterPointerLeave()
-    {
-        if (Page == IslandPage.Tasks) Page = IslandPage.Collapsed;
-    }
+    public void CollapseAfterPointerLeave() => Page = IslandPage.Collapsed;
 }
 public sealed record ActivationRequest(Guid? TaskId)
 {

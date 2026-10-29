@@ -4,6 +4,22 @@ using Xunit;
 
 public class IslandNavigationTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LeavingPeerPageReopensTasks(bool settings) => IslandMotionTests.RunSta(window =>
+    {
+        if (settings) window.OpenSettings(); else window.OpenArchive();
+        IslandMotionTests.Pump(300);
+        window.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0) { RoutedEvent = System.Windows.Input.Mouse.MouseLeaveEvent });
+        Assert.False(((FrameworkElement)window.FindName("ContentPanel")).IsHitTestVisible);
+        IslandMotionTests.Pump(300);
+        window.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0) { RoutedEvent = System.Windows.Input.Mouse.MouseEnterEvent });
+        IslandMotionTests.Pump(300);
+        Assert.Equal(Visibility.Visible, ((FrameworkElement)window.FindName("TasksPanel")).Visibility);
+        Assert.Equal(Visibility.Collapsed, ((FrameworkElement)window.FindName("SettingsPanel")).Visibility);
+        Assert.Equal(Visibility.Collapsed, ((FrameworkElement)window.FindName("ArchivePanel")).Visibility);
+    });
     [Fact] public void PointerStartsOpenAndCloseImmediatelyWithoutChangingMotionDuration() => IslandMotionTests.RunSta(window =>
     {
         var content = (FrameworkElement)window.FindName("ContentPanel");

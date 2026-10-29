@@ -64,6 +64,11 @@ public partial class IslandViewModel
   finally{IsAttachmentCopying=false;attachmentCopyCancellation=null;}
  });
  [RelayCommand] private void CancelAttachmentCopy()=>attachmentCopyCancellation?.Cancel();
+ [RelayCommand] private async Task RemoveAttachmentAsync(AttachmentItem item)
+ {
+  if(IsBusy)return;
+  RequestRemoveAttachment(item);try{await ConfirmAttachmentRemovalAsync();}finally{ConfirmRemoveAttachment=false;removingAttachment=null;}
+ }
  [RelayCommand] private void RequestRemoveAttachment(AttachmentItem item)
  {if(IsBusy)return;removingAttachment=item;ConfirmRemoveAttachment=true;}
  [RelayCommand] private void CancelRemoveAttachment(){if(!IsBusy){ConfirmRemoveAttachment=false;removingAttachment=null;}}

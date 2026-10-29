@@ -6,6 +6,8 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Documents;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using TaskIsland.Application;
 using TaskIsland.WindowsIntegration;
@@ -29,6 +31,9 @@ public partial class IslandWindow : Window
     private bool exitApproved;
     private int exitRequestGeneration;
     private ListBoxItem? dragHighlight;
+    private DragTargetAdorner? dragAdorner;
+    private AdornerLayer? dragLayer;
+    private readonly DispatcherTimer dragTracker = new() { Interval = TimeSpan.FromMilliseconds(16) };
     public static readonly DependencyProperty IsCountdownRunningProperty = DependencyProperty.Register(nameof(IsCountdownRunning), typeof(bool), typeof(IslandWindow), new PropertyMetadata(false));
     public bool IsCountdownRunning { get => (bool)GetValue(IsCountdownRunningProperty); private set => SetValue(IsCountdownRunningProperty, value); }
 
@@ -40,6 +45,11 @@ public partial class IslandWindow : Window
         DataContext = model;
         model.NavigationRequested += page => Navigate(page, true);
         model.FeedbackRequested += PlayFeedbackAsync;
+        dragTracker.Tick += (_, _) =>
+        {
+            if (CursorOutsideIsland()) EndExternalDrag();
+            else if ((GetAsyncKeyState(1) & 0x8000) == 0) { dragTracker.Stop(); ClearDragHighlight(); }
+        };
         model.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(IslandViewModel.AnimationsEnabled) && new WindowInteropHelper(this).Handle != 0)
@@ -58,6 +68,7 @@ public partial class IslandWindow : Window
         SystemParameters.StaticPropertyChanged += OnSystemParametersChanged;
         Closed += (_, _) =>
         {
+            dragTracker.Stop(); ClearDragHighlight();
             fullscreenMonitor?.Dispose();
             source?.RemoveHook(WindowMessages);
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
@@ -100,22 +111,42 @@ public partial class IslandWindow : Window
         }
         return null;
     }
-    private void ClearDragHighlight() { if (dragHighlight is not null) { dragHighlight.ClearValue(Control.BorderBrushProperty); dragHighlight.ClearValue(Control.BorderThicknessProperty); } dragHighlight = null; }
+    private void ClearDragHighlight() { if (dragAdorner is not null) dragLayer?.Remove(dragAdorner); dragAdorner = null; dragLayer = null; dragHighlight = null; }
+    private void SetDragHighlight(ListBoxItem? row)
+    {
+        if (ReferenceEquals(row, dragHighlight)) return;
+        ClearDragHighlight(); if (row is null) return;
+        dragHighlight = row; dragLayer = AdornerLayer.GetAdornerLayer(row);
+        if (dragLayer is not null) { dragAdorner = new DragTargetAdorner(row); dragLayer.Add(dragAdorner); }
+    }
+    private bool CursorOutsideIsland() => GetCursorPos(out var position) && !motion.Contains(PointFromScreen(new Point(position.X, position.Y)));
+    private void CollapseToTasks()
+    {
+        if (state.Page == IslandPage.Collapsed) return;
+        state.Navigate(IslandPage.Tasks); SwitchPage(IslandPage.Tasks);
+        state.CollapseAfterPointerLeave(); RenderState();
+    }
+    private void EndExternalDrag() { dragTracker.Stop(); ClearDragHighlight(); CollapseToTasks(); }
+    [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X; public int Y; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint point);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     private void OnAttachmentDragEnter(object sender, DragEventArgs e)
-    { if (e.Data.GetDataPresent(DataFormats.FileDrop, false) && state.Page != IslandPage.Tasks) { OpenTasks(false); } }
+    { if (e.Data.GetDataPresent(DataFormats.FileDrop, false)) { dragTracker.Start(); if (state.Page != IslandPage.Tasks) OpenTasks(false); } }
     private void OnAttachmentDragOver(object sender, DragEventArgs e)
     {
-        ClearDragHighlight();
         var row = RowAt(e.OriginalSource as DependencyObject);
         var accepted = state.Page == IslandPage.Tasks && row?.DataContext is TaskRowViewModel && e.Data.GetDataPresent(DataFormats.FileDrop, false) && !model.IsBusy;
         e.Effects = accepted ? DragDropEffects.Copy : DragDropEffects.None;
-        if (accepted) { dragHighlight = row; row!.BorderBrush = (Brush)FindResource("IslandAccent"); row.BorderThickness = new Thickness(1); }
+        SetDragHighlight(accepted ? row : null);
         e.Handled = true;
     }
-    private void OnAttachmentDragLeave(object sender, DragEventArgs e) => ClearDragHighlight();
+    private void OnAttachmentDragLeave(object sender, DragEventArgs e)
+    {
+        if (CursorOutsideIsland()) EndExternalDrag();
+    }
     private async void OnAttachmentDrop(object sender, DragEventArgs e)
     {
-        ClearDragHighlight(); e.Handled = true;
+        dragTracker.Stop(); ClearDragHighlight(); e.Handled = true;
         var row = RowAt(e.OriginalSource as DependencyObject);
         if (state.Page != IslandPage.Tasks || row?.DataContext is not TaskRowViewModel item || e.Data.GetData(DataFormats.FileDrop, false) is not string[] paths)
         { ShowError("请拖到具体日程上"); return; }
@@ -184,11 +215,12 @@ public partial class IslandWindow : Window
     {
         var enabled = model.AnimationsEnabled && SystemParameters.ClientAreaAnimation && IsVisible;
         FrameworkElement? target = null;
-        if (cue == OperationCue.Delete) target = PageDeck.Children.OfType<DeletionConfirmationControl>().FirstOrDefault();
+        if (cue == OperationCue.Delete && id is null) target = ArchiveList;
         else if (id is { } taskId)
         {
-            var list = cue == OperationCue.Restore ? ArchiveList : ActiveList;
-            var items = cue == OperationCue.Restore ? model.ArchivedTasks : model.Tasks;
+            var archived = cue is OperationCue.Restore or OperationCue.Delete;
+            var list = archived ? ArchiveList : ActiveList;
+            var items = archived ? model.ArchivedTasks : model.Tasks;
             var row = items.FirstOrDefault(x => x.Item.Id == taskId);
             if (row is not null)
             {
@@ -201,12 +233,16 @@ public partial class IslandWindow : Window
         if (cue == OperationCue.Renew && enabled) FindHourglass(target)?.PulseRenewal();
         return OperationMotion.PlayAsync(target, cue, enabled);
     }
-    private void OnPointerEnter(object sender, MouseEventArgs e) { if (state.Page == IslandPage.Collapsed) OpenTasks(false); }
-    private void OnPointerLeave(object sender, MouseEventArgs e) { state.CollapseAfterPointerLeave(); RenderState(); }
+    private void OnPointerEnter(object sender, MouseEventArgs e) { if (state.Page == IslandPage.Collapsed) { state.ExpandAfterPointerEnter(); RenderState(); } }
+    private void OnPointerLeave(object sender, MouseEventArgs e)
+    {
+        if (dragTracker.IsEnabled) { if (CursorOutsideIsland()) EndExternalDrag(); return; }
+        CollapseToTasks();
+    }
     private void OnEmptyClick(object sender, MouseButtonEventArgs e) { if (model.Tasks.Count == 0) model.AddCommand.Execute(null); else OpenTasks(true); }
-    private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
-    private void OnTasks(object sender, RoutedEventArgs e) => OpenTasks(true);
-    private void OnArchive(object sender, RoutedEventArgs e) => OpenArchive();
+    private void OnSettings(object sender, RoutedEventArgs e) { model.DiscardDraft(); OpenSettings(); }
+    private void OnTasks(object sender, RoutedEventArgs e) { model.DiscardDraft(); OpenTasks(true); }
+    private void OnArchive(object sender, RoutedEventArgs e) { model.DiscardDraft(); OpenArchive(); }
     private async void OnRenewClick(object sender, RoutedEventArgs e)
     {
         if (model.IsBusy) return;
@@ -220,7 +256,7 @@ public partial class IslandWindow : Window
             if (FindHourglass(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
         return null;
     }
-    private void OnBack(object sender, RoutedEventArgs e) { if (state.Page == IslandPage.Editor) model.CancelEditCommand.Execute(null); else OpenTasks(true); }
+    private void OnBack(object sender, RoutedEventArgs e) { model.LeaveEditorCommand.Execute(null); }
     private async void OnTaskRightClick(object sender, MouseButtonEventArgs e)
     { if (sender is FrameworkElement { DataContext: TaskRowViewModel row }) { e.Handled = true; await model.PinCommand.ExecuteAsync(row); } }
     private void OnAnchor(object sender, RoutedEventArgs e)
@@ -232,7 +268,7 @@ public partial class IslandWindow : Window
     {
         if (e.Key != Key.Escape) return;
         if (model.ConfirmDelete) { model.CancelDeleteCommand.Execute(null); e.Handled = true; return; }
-        if (state.Page == IslandPage.Editor) { model.CancelEditCommand.Execute(null); e.Handled = true; return; }
+        if (state.Page == IslandPage.Editor) { if (model.HasUnsavedChanges) BackButton.Activate(); else model.LeaveEditorCommand.Execute(null); e.Handled = true; return; }
         state.Navigate(state.Page is IslandPage.Settings or IslandPage.Archive ? IslandPage.Tasks : IslandPage.Collapsed);
         RenderState(); e.Handled = true;
     }

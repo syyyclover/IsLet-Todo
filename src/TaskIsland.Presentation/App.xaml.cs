@@ -144,6 +144,7 @@ public partial class App : System.Windows.Application
         if (taskStore is null || Dispatcher.HasShutdownStarted) return;
         try
         {
+            if (attachments is not null && !await attachments.RetryCleanupAsync()) island?.ShowError("部分附件副本仍在等待清理");
             var failed = await taskStore.ReadAsync(tx => tx.ListActive().Any(item =>
                 tx.FindReminder(item.Id, item.ReminderRevision) is { Status: ReminderStatus.Failed, Attempts: >= 3 }));
             if (failed) island?.ShowError("部分提醒提交失败，请检查系统通知设置");
