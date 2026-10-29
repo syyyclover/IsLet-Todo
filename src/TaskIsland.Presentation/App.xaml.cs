@@ -34,7 +34,7 @@ public partial class App : System.Windows.Application
             {
                 // Begin accepting second launches before notification registration and XAML initialization.
                 instance.Activated += value => Dispatcher.BeginInvoke(() => HandleActivation(value));
-                instance.Failed += ex => Dispatcher.BeginInvoke(() => { WriteDiagnostic("ipc", ex); island?.ShowStatus("启动转发不可用，请退出后重新启动。"); });
+                instance.Failed += ex => Dispatcher.BeginInvoke(() => { WriteDiagnostic("ipc", ex); island?.ShowError("启动转发不可用，请退出后重新启动。"); });
                 instance.Listen();
             }
             var comActivation = e.Args.Any(value => value.StartsWith("----AppNotificationActivated:", StringComparison.Ordinal));
@@ -95,7 +95,7 @@ public partial class App : System.Windows.Application
             var reminderDispatcher = new ReminderDispatcher(taskService, taskStore, notifications, TimeProvider.System);
             scheduler = new(taskService, TimeProvider.System, reminderDispatcher);
             scheduler.CycleCompleted += () => Dispatcher.BeginInvoke(CheckReminderStatus);
-            scheduler.Failed += ex => Dispatcher.BeginInvoke(() => { WriteDiagnostic("scheduler", ex); island.ShowStatus("时间校准暂时失败，将在下次校准时重试。"); });
+            scheduler.Failed += ex => Dispatcher.BeginInvoke(() => { WriteDiagnostic("scheduler", ex); island.ShowError("时间校准暂时失败，将在下次校准时重试。"); });
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
             SystemEvents.TimeChanged += OnSystemTimeChanged;
             scheduler.Start();
@@ -129,7 +129,7 @@ public partial class App : System.Windows.Application
         {
             var request = TaskIsland.Application.ActivationRequest.Parse(argument);
             await island.FocusNotificationAsync(request.TaskId);
-            if (request.TaskId is null && argument is not "show" and not "action=show") island.ShowStatus("通知参数无效，已打开日程岛");
+            if (request.TaskId is null && argument is not "show" and not "action=show") island.ShowError("通知参数无效，已打开日程岛");
         }
         catch (Exception ex) { WriteDiagnostic("notification-route", ex); island.ShowError("日程定位失败，请重试"); }
     }

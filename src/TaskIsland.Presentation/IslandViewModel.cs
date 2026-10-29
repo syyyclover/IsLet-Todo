@@ -17,6 +17,14 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     private bool addAfterBusy;
     private IslandPage discardDestination = IslandPage.Tasks;
     public event Action<IslandPage>? NavigationRequested;
+    public event Func<Guid?, OperationCue, Task>? FeedbackRequested;
+    private async Task FeedbackAsync(Guid? id, OperationCue cue)
+    {
+        if (FeedbackRequested is not { } handlers) return;
+        foreach (Func<Guid?, OperationCue, Task> handler in handlers.GetInvocationList())
+            try { await handler(id, cue); }
+            catch { /* Visual feedback cannot turn a committed operation into a save failure. */ }
+    }
     [ObservableProperty] public partial string Status { get; set; } = "正在准备本地日程…";
     [ObservableProperty] public partial IslandAnchor Anchor { get; set; } = IslandAnchor.Center;
     [ObservableProperty] public partial bool AnimationsEnabled { get; set; } = true;
@@ -24,6 +32,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string FeaturedTitle { get; set; } = "暂无日程";
     [ObservableProperty] public partial bool ConfirmDiscard { get; set; }
     [ObservableProperty] public partial bool IsError { get; set; }
+    [ObservableProperty] public partial string ErrorMessage { get; set; } = "";
     [ObservableProperty] public partial bool IsBusy { get; set; }
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(AddCommand))] public partial bool IsReady { get; set; }
     [ObservableProperty] public partial bool HasMoreArchives { get; set; }
@@ -98,7 +107,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     [RelayCommand] private Task SaveAsync() => RunAsync(async () =>
     {
         if (!editing) return;
-        if (!EditorTime.ValidateForSave()) { Status = EditorTime.Error; IsError = true; return; }
+        if (!EditorTime.ValidateForSave()) { Status = ErrorMessage = EditorTime.Error; IsError = true; return; }
         var submittedDue = EditorTime.ConfirmedDueAt;
         var submittedTitle = EditorTitle;
         var saved = editingItem is null ? await service!.CreateTaskAsync(submittedTitle, submittedDue)
@@ -112,6 +121,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         editing = false; ConfirmDiscard = false; EditorTitle = "";
         await ReloadAsync(); Status = "已保存";
         NavigationRequested?.Invoke(IslandPage.Tasks);
+        await FeedbackAsync(saved.Id, OperationCue.Save);
     });
     public bool TryLeaveEditor(IslandPage destination)
     {
@@ -129,15 +139,15 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         NavigationRequested?.Invoke(discardDestination);
     }
     [RelayCommand] private Task CompleteAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Completed); await ReloadAsync(); Status = "已完成并归档"; });
+    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Completed); await FeedbackAsync(row.Item.Id, OperationCue.Complete); await ReloadAsync(); Status = "已完成并归档"; });
     [RelayCommand] private Task ArchiveAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Manual); await ReloadAsync(); Status = "已归档"; });
+    { await service!.ArchiveTaskAsync(row.Item.Id, TaskIsland.Domain.ArchiveReason.Manual); await FeedbackAsync(row.Item.Id, OperationCue.Archive); await ReloadAsync(); Status = "已归档"; });
     [RelayCommand] private Task RestoreAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.RestoreTaskAsync(row.Item.Id); await ReloadAsync(); Status = "已恢复"; });
+    { await service!.RestoreTaskAsync(row.Item.Id); await FeedbackAsync(row.Item.Id, OperationCue.Restore); await ReloadAsync(); Status = "已恢复"; });
     [RelayCommand] private Task PinAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.SetPinnedTaskAsync(row.IsPinned ? null : row.Item.Id); await ReloadAsync(); Status = row.IsPinned ? "已取消置顶" : "已置顶"; });
+    { await service!.SetPinnedTaskAsync(row.IsPinned ? null : row.Item.Id); await FeedbackAsync(row.Item.Id, OperationCue.Pin); await ReloadAsync(); Status = row.IsPinned ? "已取消置顶" : "已置顶"; });
     [RelayCommand] private Task RenewAsync(TaskRowViewModel row) => RunAsync(async () =>
-    { await service!.RenewArchiveAsync(row.Item.Id); await ReloadAsync(); Status = "已延长保留时间"; });
+    { await service!.RenewArchiveAsync(row.Item.Id); await FeedbackAsync(row.Item.Id, OperationCue.Renew); await ReloadAsync(); Status = "已延长保留时间"; });
     [RelayCommand] private Task LoadMoreArchivesAsync() => RunAsync(async () =>
     {
         var page = await service!.ListArchivedAsync(ArchivedTasks.Count);
@@ -162,6 +172,7 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         IsError = true;
         Status = ex is ArgumentException or InvalidOperationException ? ex.Message.Split('\r', '\n')[0]
             : "操作失败，未保存的输入已保留。请重试或检查本地存储。";
+        ErrorMessage = Status;
     }
     public void Dispose() { disposed = true; if (service is not null) service.Changed -= OnChanged; }
 }

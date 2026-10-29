@@ -37,6 +37,7 @@ public partial class IslandWindow : Window
         this.notifications = notifications;
         DataContext = model;
         model.NavigationRequested += page => Navigate(page, true);
+        model.FeedbackRequested += PlayFeedbackAsync;
         model.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(IslandViewModel.AnimationsEnabled) && new WindowInteropHelper(this).Handle != 0)
@@ -111,7 +112,7 @@ public partial class IslandWindow : Window
         OpenTasks(true);
         if (taskId is not { } id) return;
         var row = model.Tasks.FirstOrDefault(x => x.Item.Id == id);
-        if (row is null) { ShowStatus("这条日程已归档或不再存在"); return; }
+        if (row is null) { ShowError("这条日程已归档或不再存在"); return; }
         ActiveList.SelectedItem = row; ActiveList.ScrollIntoView(row);
         ActiveList.Focus(); ShowStatus("已定位到期日程");
     }
@@ -128,8 +129,30 @@ public partial class IslandWindow : Window
         if (focus) Activate();
         if (page == IslandPage.Editor) Dispatcher.BeginInvoke(() => TitleInput.Focus(), DispatcherPriority.Input);
     }
-    public void ShowStatus(string message) { model.Status = message; }
-    public void ShowError(string message) { model.IsError = true; model.Status = message; }
+    public void ShowStatus(string message) { model.IsError = false; model.Status = message; }
+    public void ShowError(string message) { model.ErrorMessage = message; model.IsError = true; model.Status = message; }
+    private void OnDismissError(object sender, RoutedEventArgs e) { model.IsError = false; model.Status = ""; }
+    private Task PlayFeedbackAsync(Guid? id, OperationCue cue)
+    {
+        var enabled = model.AnimationsEnabled && SystemParameters.ClientAreaAnimation && IsVisible;
+        FrameworkElement? target = null;
+        if (cue == OperationCue.Delete) target = PageDeck.Children.OfType<DeletionConfirmationControl>().FirstOrDefault();
+        else if (id is { } taskId)
+        {
+            var list = cue == OperationCue.Restore ? ArchiveList : ActiveList;
+            var items = cue == OperationCue.Restore ? model.ArchivedTasks : model.Tasks;
+            var row = items.FirstOrDefault(x => x.Item.Id == taskId);
+            if (row is not null)
+            {
+                list.UpdateLayout();
+                target = list.ItemContainerGenerator.ContainerFromItem(row) as FrameworkElement;
+            }
+        }
+        if (cue == OperationCue.Save && target is null) target = AddTaskButton;
+        if (target is null) return Task.CompletedTask;
+        if (cue == OperationCue.Renew && enabled) FindHourglass(target)?.PulseRenewal();
+        return OperationMotion.PlayAsync(target, cue, enabled);
+    }
     private void OnPointerEnter(object sender, MouseEventArgs e) { leaveTimer.Stop(); if (state.Page == IslandPage.Collapsed) enterTimer.Start(); }
     private void OnPointerLeave(object sender, MouseEventArgs e) { enterTimer.Stop(); leaveTimer.Start(); }
     private void OnEmptyClick(object sender, MouseButtonEventArgs e) { if (model.Tasks.Count == 0) model.AddCommand.Execute(null); else OpenTasks(true); }
@@ -141,11 +164,6 @@ public partial class IslandWindow : Window
         if (model.IsBusy) return;
         if (sender is not Button { DataContext: TaskRowViewModel row }) return;
         await model.RenewCommand.ExecuteAsync(row);
-        if (model.IsError) return;
-        ActiveList.UpdateLayout();
-        var current = model.Tasks.FirstOrDefault(x => x.Item.Id == row.Item.Id);
-        if (current is not null && ActiveList.ItemContainerGenerator.ContainerFromItem(current) is DependencyObject container)
-            FindHourglass(container)?.PulseRenewal();
     }
     private static HourglassControl? FindHourglass(DependencyObject parent)
     {
@@ -174,7 +192,8 @@ public partial class IslandWindow : Window
     private void OnTestNotification(object sender, RoutedEventArgs e)
     {
         notifications.SendTest();
-        ShowStatus(notifications.Error ?? "测试通知已提交，请点击通知验证激活。");
+        if (notifications.Error is { } error) ShowError(error);
+        else ShowStatus("测试通知已提交，请点击通知验证激活。");
     }
 #endif
 

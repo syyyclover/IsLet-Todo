@@ -35,6 +35,7 @@ public partial class IslandViewModel
         if (deleteAll) await service!.DeleteAllArchivedTasksAsync();
         else if (deleteTaskId is { } id) await service!.DeleteArchivedTaskAsync(id);
         else return;
+        await FeedbackAsync(deleteTaskId, OperationCue.Delete);
         await ReloadAsync();
         ConfirmDelete = false; deleteTaskId = null; deleteAll = false;
         Status = "已删除归档日程";
