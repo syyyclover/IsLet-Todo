@@ -58,8 +58,8 @@ public partial class IslandViewModel : ObservableObject, IDisposable
         {
             var overview = await service.ReadOverviewAsync();
             if (disposed || generation != reloadGeneration) return;
-            SyncRows(Tasks, overview.Active.Tasks.Select(item => new TaskRowViewModel(item, item.Id == overview.Active.PinnedTaskId)).ToArray());
-            SyncRows(ArchivedTasks, overview.Archived.Select(item => new TaskRowViewModel(item, false)).ToArray());
+            SyncRows(Tasks, overview.Active.Tasks.Select(item => new TaskRowViewModel(item, item.Id == overview.Active.PinnedTaskId) { AttachmentCount = overview.AttachmentCounts?.GetValueOrDefault(item.Id) ?? 0 }).ToArray());
+            SyncRows(ArchivedTasks, overview.Archived.Select(item => new TaskRowViewModel(item, false) { AttachmentCount = overview.AttachmentCounts?.GetValueOrDefault(item.Id) ?? 0 }).ToArray());
             HasMoreArchives = overview.Archived.Count == 50;
             FeaturedTitle = Tasks.FirstOrDefault()?.Summary ?? "暂无日程";
         }
@@ -170,9 +170,8 @@ public partial class IslandViewModel : ObservableObject, IDisposable
     private void ShowFailure(Exception ex)
     {
         IsError = true;
-        Status = ex is ArgumentException or InvalidOperationException ? ex.Message.Split('\r', '\n')[0]
-            : "操作失败，未保存的输入已保留。请重试或检查本地存储。";
+        Status = UserFacingErrors.Message(ex);
         ErrorMessage = Status;
     }
-    public void Dispose() { disposed = true; if (service is not null) service.Changed -= OnChanged; }
+    public void Dispose() { disposed = true; DisposeAttachments(); if (service is not null) service.Changed -= OnChanged; }
 }

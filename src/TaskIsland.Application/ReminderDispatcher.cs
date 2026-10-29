@@ -56,7 +56,7 @@ public sealed class ReminderDispatcher(TaskService service, ITaskStore store, IR
     public async Task<DateTimeOffset?> GetNextEventAtAsync(CancellationToken ct = default)
     {
         var next = await service.GetNextEventAtAsync(ct).ConfigureAwait(false);
-        var retry = await store.ReadAsync(tx => tx.ListActive()
+        var retry = await store.ReadAsync(tx => tx.ListActive().Where(item => item.ArchiveAtUtc > clock.GetUtcNow())
             .Select(item => tx.FindReminder(item.Id, item.ReminderRevision))
             .Where(delivery => delivery is { Attempts: < 3, Status: ReminderStatus.Pending or ReminderStatus.Failed })
             .Select(delivery => delivery!.NextAttemptAtUtc ?? clock.GetUtcNow()).Cast<DateTimeOffset?>().Min(), ct).ConfigureAwait(false);

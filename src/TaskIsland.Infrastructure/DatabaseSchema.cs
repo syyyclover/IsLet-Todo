@@ -4,7 +4,7 @@ namespace TaskIsland.Infrastructure;
 
 internal static class DatabaseSchema
 {
-    internal const int CurrentVersion = 2;
+    internal const int CurrentVersion = 3;
     public static void Initialize(SqliteConnection db, string backupDirectory)
     {
         var version = Convert.ToInt32(Scalar(db, "PRAGMA user_version"));
@@ -41,7 +41,7 @@ internal static class DatabaseSchema
                   ArchivedAtUtc INTEGER, ArchiveReason INTEGER, ReminderRevision INTEGER NOT NULL);
                 CREATE TABLE Settings(Key TEXT PRIMARY KEY, Value TEXT);
                 """, tx);
-            Execute(db, """
+            if (version < 2) Execute(db, """
                 CREATE TABLE ReminderDeliveries(
                   TaskId TEXT NOT NULL REFERENCES Tasks(Id) ON DELETE CASCADE,
                   Revision INTEGER NOT NULL, Status INTEGER NOT NULL, Attempts INTEGER NOT NULL,
@@ -54,7 +54,17 @@ internal static class DatabaseSchema
                   SELECT task_id,reminder_revision,status,attempt_count,next_attempt_at_utc,last_error FROM reminder_deliveries;
                 DROP TABLE reminder_deliveries;
                 """, tx);
-            Execute(db, "PRAGMA user_version=2;", tx);
+            Execute(db, """
+                CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,task_id TEXT NOT NULL REFERENCES Tasks(Id) ON DELETE CASCADE,stored_relative_path TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS pending_file_cleanup(id INTEGER PRIMARY KEY,stored_relative_path TEXT NOT NULL,created_at_utc INTEGER NOT NULL DEFAULT 0);
+                """, tx);
+            foreach (var (name, definition) in new[] { ("original_name", "TEXT NOT NULL DEFAULT ''"), ("size_bytes", "INTEGER NOT NULL DEFAULT 0"),
+                ("kind", "TEXT NOT NULL DEFAULT 'file'"), ("added_at_utc", "INTEGER NOT NULL DEFAULT 0") })
+                if (Convert.ToInt64(Scalar(db, $"SELECT COUNT(*) FROM pragma_table_info('attachments') WHERE name='{name}'")) == 0)
+                    Execute(db, $"ALTER TABLE attachments ADD COLUMN {name} {definition};", tx);
+            if (Convert.ToInt64(Scalar(db, "SELECT COUNT(*) FROM pragma_table_info('pending_file_cleanup') WHERE name='created_at_utc'")) == 0)
+                Execute(db, "ALTER TABLE pending_file_cleanup ADD COLUMN created_at_utc INTEGER NOT NULL DEFAULT 0;", tx);
+            Execute(db, "CREATE INDEX IF NOT EXISTS IX_Attachments_Task ON attachments(task_id); PRAGMA user_version=3;", tx);
             tx.Commit();
         }
         Execute(db, "PRAGMA journal_mode=WAL;");

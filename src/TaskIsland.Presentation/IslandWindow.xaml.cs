@@ -17,8 +17,6 @@ public partial class IslandWindow : Window
     private readonly IslandState state = new();
     private readonly IslandViewModel model = new();
     private readonly NotificationService notifications;
-    private readonly DispatcherTimer enterTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
-    private readonly DispatcherTimer leaveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private HwndSource? source;
     private readonly IslandMotion motion;
     private IslandPage displayedPage = IslandPage.Tasks;
@@ -27,6 +25,10 @@ public partial class IslandWindow : Window
     private StartupRegistration? startupRegistration;
     private FullscreenMonitor? fullscreenMonitor;
     private bool hiddenForFullscreen;
+    private AttachmentService? attachmentService;
+    private bool exitApproved;
+    private int exitRequestGeneration;
+    private ListBoxItem? dragHighlight;
     public static readonly DependencyProperty IsCountdownRunningProperty = DependencyProperty.Register(nameof(IsCountdownRunning), typeof(bool), typeof(IslandWindow), new PropertyMetadata(false));
     public bool IsCountdownRunning { get => (bool)GetValue(IsCountdownRunningProperty); private set => SetValue(IsCountdownRunningProperty, value); }
 
@@ -45,8 +47,6 @@ public partial class IslandWindow : Window
             if (settingsService is not null && args.PropertyName is nameof(IslandViewModel.Anchor) or nameof(IslandViewModel.AnimationsEnabled)) SaveSettings();
         };
         if (notifications.Error is not null) model.Status = notifications.Error;
-        enterTimer.Tick += (_, _) => { enterTimer.Stop(); if (IsMouseOver && state.Page == IslandPage.Collapsed) OpenTasks(false); };
-        leaveTimer.Tick += (_, _) => { leaveTimer.Stop(); if (!IsMouseOver) { state.CollapseAfterPointerLeave(); RenderState(); } };
         SourceInitialized += (_, _) =>
         {
             source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
@@ -59,11 +59,21 @@ public partial class IslandWindow : Window
         Closed += (_, _) =>
         {
             fullscreenMonitor?.Dispose();
-            enterTimer.Stop(); leaveTimer.Stop(); source?.RemoveHook(WindowMessages);
+            source?.RemoveHook(WindowMessages);
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
             model.Dispose();
             System.Windows.Application.Current?.Shutdown();
+        };
+        Closing += (_, e) =>
+        {
+            if (!exitApproved && attachmentService?.IsCopying == true)
+            {
+                e.Cancel = true;
+                exitRequestGeneration++;
+                if (state.Page == IslandPage.Collapsed) state.Navigate(IslandPage.Tasks);
+                Show(); RenderState(); CopyExitPrompt.Visibility = Visibility.Visible; Activate();
+            }
         };
 #if DEBUG
         var testButton = new Button { Content = "发送测试通知 · Debug" };
@@ -73,6 +83,44 @@ public partial class IslandWindow : Window
     }
 
     public Task AttachTasksAsync(TaskService service) => model.AttachAsync(service);
+    public void AttachAttachments(AttachmentService service) { attachmentService = service; model.AttachAttachmentService(service); }
+    public void RequestExit() => Close();
+    private async void OnWaitCopyExit(object sender, RoutedEventArgs e)
+    { var request = exitRequestGeneration; if (attachmentService is not null) await attachmentService.WaitForIdleAsync(); FinishCopyExit(request); }
+    private async void OnCancelCopyExit(object sender, RoutedEventArgs e)
+    { var request = exitRequestGeneration; attachmentService?.CancelAll(); if (attachmentService is not null) await attachmentService.WaitForIdleAsync(); FinishCopyExit(request); }
+    private void FinishCopyExit(int request) { if (request != exitRequestGeneration || exitApproved) return; exitApproved = true; Close(); }
+    private void OnKeepCopying(object sender, RoutedEventArgs e) { exitRequestGeneration++; CopyExitPrompt.Visibility = Visibility.Collapsed; }
+    private static ListBoxItem? RowAt(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ListBoxItem item) return item;
+            source = source is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(source) : LogicalTreeHelper.GetParent(source);
+        }
+        return null;
+    }
+    private void ClearDragHighlight() { if (dragHighlight is not null) { dragHighlight.ClearValue(Control.BorderBrushProperty); dragHighlight.ClearValue(Control.BorderThicknessProperty); } dragHighlight = null; }
+    private void OnAttachmentDragEnter(object sender, DragEventArgs e)
+    { if (e.Data.GetDataPresent(DataFormats.FileDrop, false) && state.Page != IslandPage.Tasks) { OpenTasks(false); } }
+    private void OnAttachmentDragOver(object sender, DragEventArgs e)
+    {
+        ClearDragHighlight();
+        var row = RowAt(e.OriginalSource as DependencyObject);
+        var accepted = state.Page == IslandPage.Tasks && row?.DataContext is TaskRowViewModel && e.Data.GetDataPresent(DataFormats.FileDrop, false) && !model.IsBusy;
+        e.Effects = accepted ? DragDropEffects.Copy : DragDropEffects.None;
+        if (accepted) { dragHighlight = row; row!.BorderBrush = (Brush)FindResource("IslandAccent"); row.BorderThickness = new Thickness(1); }
+        e.Handled = true;
+    }
+    private void OnAttachmentDragLeave(object sender, DragEventArgs e) => ClearDragHighlight();
+    private async void OnAttachmentDrop(object sender, DragEventArgs e)
+    {
+        ClearDragHighlight(); e.Handled = true;
+        var row = RowAt(e.OriginalSource as DependencyObject);
+        if (state.Page != IslandPage.Tasks || row?.DataContext is not TaskRowViewModel item || e.Data.GetData(DataFormats.FileDrop, false) is not string[] paths)
+        { ShowError("请拖到具体日程上"); return; }
+        await model.AddAttachmentsAsync(item.Item.Id, paths);
+    }
     public async Task AttachSettingsAsync(SettingsService service)
     {
         var saved = await service.LoadAsync();
@@ -153,8 +201,8 @@ public partial class IslandWindow : Window
         if (cue == OperationCue.Renew && enabled) FindHourglass(target)?.PulseRenewal();
         return OperationMotion.PlayAsync(target, cue, enabled);
     }
-    private void OnPointerEnter(object sender, MouseEventArgs e) { leaveTimer.Stop(); if (state.Page == IslandPage.Collapsed) enterTimer.Start(); }
-    private void OnPointerLeave(object sender, MouseEventArgs e) { enterTimer.Stop(); leaveTimer.Start(); }
+    private void OnPointerEnter(object sender, MouseEventArgs e) { if (state.Page == IslandPage.Collapsed) OpenTasks(false); }
+    private void OnPointerLeave(object sender, MouseEventArgs e) { state.CollapseAfterPointerLeave(); RenderState(); }
     private void OnEmptyClick(object sender, MouseButtonEventArgs e) { if (model.Tasks.Count == 0) model.AddCommand.Execute(null); else OpenTasks(true); }
     private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
     private void OnTasks(object sender, RoutedEventArgs e) => OpenTasks(true);
@@ -201,7 +249,7 @@ public partial class IslandWindow : Window
     {
         var expanded = state.Page != IslandPage.Collapsed;
         IsCountdownRunning = expanded && state.Page == IslandPage.Tasks && model.AnimationsEnabled && SystemParameters.ClientAreaAnimation;
-        BackButton.Visibility = state.Page == IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
+        BackButton.Visibility = state.Page is IslandPage.Editor or IslandPage.Attachments ? Visibility.Visible : Visibility.Collapsed;
         // Keep the outgoing page arranged until its parent has faded and the shape has closed.
         if (expanded)
         {
@@ -213,12 +261,12 @@ public partial class IslandWindow : Window
 
     private void SwitchPage(IslandPage page)
     {
-        FrameworkElement Panel(IslandPage p) => p switch { IslandPage.Settings => SettingsPanel, IslandPage.Archive => ArchivePanel, IslandPage.Editor => EditorViewport, _ => TasksPanel };
+        FrameworkElement Panel(IslandPage p) => p switch { IslandPage.Settings => SettingsPanel, IslandPage.Archive => ArchivePanel, IslandPage.Editor => EditorViewport, IslandPage.Attachments => AttachmentsPanel, _ => TasksPanel };
         int Order(IslandPage p) => p switch { IslandPage.Archive => 1, IslandPage.Settings => 2, IslandPage.Editor => 3, _ => 0 };
         var previous = displayedPage; displayedPage = page;
         var generation = ++pageGeneration;
         var incoming = Panel(page); var outgoing = Panel(previous);
-        foreach (var panel in new FrameworkElement[] { TasksPanel, ArchivePanel, SettingsPanel, EditorViewport })
+        foreach (var panel in new FrameworkElement[] { TasksPanel, ArchivePanel, SettingsPanel, EditorViewport, AttachmentsPanel })
         {
             if (panel.RenderTransform is not TranslateTransform) panel.RenderTransform = new TranslateTransform();
             var transform = (TranslateTransform)panel.RenderTransform;

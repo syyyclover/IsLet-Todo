@@ -95,7 +95,7 @@ public sealed class DatabaseTests : IDisposable
         var backup = Assert.Single(Directory.GetFiles(Path.Combine(root, "backups"), "*.db"));
         using var saved = new SqliteConnection($"Data Source={backup};Pooling=False"); saved.Open();
         Assert.Equal(1L, Scalar(saved, "PRAGMA user_version"));
-        using var current = Open(); Assert.Equal(causeFailure ? 1L : 2L, Scalar(current, "PRAGMA user_version"));
+        using var current = Open(); Assert.Equal(causeFailure ? 1L : 3L, Scalar(current, "PRAGMA user_version"));
     }
     [Fact] public async Task DatabaseUsesWalAndEnforcesForeignKeys()
     {
@@ -129,7 +129,7 @@ public sealed class DatabaseTests : IDisposable
         using var current = Open();
         Assert.Equal(1L, Scalar(current, "SELECT COUNT(*) FROM attachments"));
         Assert.Equal(1L, Scalar(current, "SELECT COUNT(*) FROM pending_file_cleanup"));
-        Assert.Equal(2L, Scalar(current, "PRAGMA user_version"));
+        Assert.Equal(3L, Scalar(current, "PRAGMA user_version"));
         var backup = Assert.Single(Directory.GetFiles(Path.Combine(root, "backups"), "*.db"));
         using var saved = new SqliteConnection($"Data Source={backup};Pooling=False"); saved.Open();
         Assert.Equal(1L, Scalar(saved, "PRAGMA user_version"));

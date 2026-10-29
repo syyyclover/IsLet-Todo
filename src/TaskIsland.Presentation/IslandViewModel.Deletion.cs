@@ -38,6 +38,8 @@ public partial class IslandViewModel
         await FeedbackAsync(deleteTaskId, OperationCue.Delete);
         await ReloadAsync();
         ConfirmDelete = false; deleteTaskId = null; deleteAll = false;
+        if (attachmentService is not null && !await attachmentService.RetryCleanupAsync())
+        { IsError = true; ErrorMessage = "日程记录已删除，部分附件仍等待清理"; return; }
         Status = "已删除归档日程";
     });
 }

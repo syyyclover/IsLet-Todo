@@ -4,6 +4,17 @@ using Xunit;
 
 public class IslandNavigationTests
 {
+    [Fact] public void PointerStartsOpenAndCloseImmediatelyWithoutChangingMotionDuration() => IslandMotionTests.RunSta(window =>
+    {
+        var content = (FrameworkElement)window.FindName("ContentPanel");
+        window.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0) { RoutedEvent = System.Windows.Input.Mouse.MouseEnterEvent });
+        Assert.True(content.IsHitTestVisible); Assert.Equal(Visibility.Visible, content.Visibility);
+        IslandMotionTests.Pump(300);
+        window.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0) { RoutedEvent = System.Windows.Input.Mouse.MouseLeaveEvent });
+        Assert.False(content.IsHitTestVisible);
+        Assert.Equal(Visibility.Visible, content.Visibility);
+        IslandMotionTests.Pump(300); Assert.Equal(Visibility.Hidden, content.Visibility);
+    });
     [Fact] public void PeerPagesKeepTabsAndSlideWithoutBackHierarchy() => IslandMotionTests.RunSta(window =>
     {
         window.OpenTasks(false); IslandMotionTests.Pump(300);

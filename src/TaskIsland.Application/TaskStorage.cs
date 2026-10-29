@@ -6,10 +6,14 @@ public enum ReminderStatus { Pending, Submitted, Failed, Skipped }
 public sealed record ReminderDelivery(Guid TaskId, int Revision, ReminderStatus Status, int Attempts,
     DateTimeOffset? NextAttemptAtUtc, string? LastError);
 public sealed record ActiveTaskList(IReadOnlyList<TaskItem> Tasks, Guid? PinnedTaskId);
-public sealed record TaskOverview(ActiveTaskList Active, IReadOnlyList<TaskItem> Archived);
+public sealed record TaskOverview(ActiveTaskList Active, IReadOnlyList<TaskItem> Archived, IReadOnlyDictionary<Guid, int>? AttachmentCounts = null);
+public sealed record PendingFileCleanup(long Id, string StoredRelativePath);
 
 public interface ITaskReader
 {
+    IReadOnlyList<AttachmentItem> ListAttachments(Guid taskId);
+    IReadOnlyList<PendingFileCleanup> ListPendingCleanup();
+    IReadOnlyDictionary<Guid, int> AttachmentCounts();
     string? ReadSetting(string key);
     TaskItem? Find(Guid id);
     IReadOnlyList<TaskItem> ListActive();
@@ -19,6 +23,10 @@ public interface ITaskReader
 }
 public interface ITaskWriter : ITaskReader
 {
+    void AddAttachment(AttachmentItem item);
+    void RemoveAttachment(Guid id);
+    void CompleteCleanup(long id);
+    void EnqueueCleanup(string storedRelativePath);
     void WriteSetting(string key, string? value);
     void Save(TaskItem item);
     void SetPinnedTaskId(Guid? id);

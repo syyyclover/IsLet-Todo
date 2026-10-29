@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace TaskIsland.Infrastructure;
 
-public sealed class SqliteTaskStore(string directory) : ITaskStore, IAsyncDisposable
+public sealed class SqliteTaskStore(string directory, TimeProvider? timeProvider = null) : ITaskStore, IAsyncDisposable
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private bool initialized;
@@ -24,7 +24,7 @@ public sealed class SqliteTaskStore(string directory) : ITaskStore, IAsyncDispos
         EnsureInitialized();
         using var db = Open();
         using var tx = db.BeginTransaction();
-        var result = read(new SqliteTaskSession(db, tx));
+        var result = read(new SqliteTaskSession(db, tx, timeProvider));
         tx.Commit();
         return result;
     }, ct);
@@ -34,7 +34,7 @@ public sealed class SqliteTaskStore(string directory) : ITaskStore, IAsyncDispos
         EnsureInitialized();
         using var db = Open();
         using var tx = db.BeginTransaction();
-        var result = write(new SqliteTaskSession(db, tx));
+        var result = write(new SqliteTaskSession(db, tx, timeProvider));
         ct.ThrowIfCancellationRequested();
         tx.Commit();
         return result;

@@ -4,6 +4,7 @@ namespace TaskIsland.Presentation;
 
 public sealed record TaskRowViewModel(TaskItem Item, bool IsPinned)
 {
+    public int AttachmentCount { get; init; }
     public string Title => Item.Title;
     public string Summary => TaskText.Summarize(Item.Title);
     public string Detail => Item.ArchivedAtUtc is { } archived

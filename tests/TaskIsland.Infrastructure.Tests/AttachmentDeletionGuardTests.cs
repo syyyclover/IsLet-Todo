@@ -11,7 +11,7 @@ public sealed class AttachmentDeletionGuardTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AttachedArchivedTaskRefusesDeletionAndRollsBackEntireTransaction(bool bulk)
+    public async Task AttachedArchivedTaskDeletionQueuesCopiesAndRollsBackEntireTransactionOnFailure(bool bulk)
     {
         await using var store = new SqliteTaskStore(root);
         await store.InitializeAsync();
@@ -24,19 +24,17 @@ public sealed class AttachmentDeletionGuardTests : IDisposable
         await File.WriteAllTextAsync(copy, "copy evidence");
         using (var db = Open(store.DatabasePath))
         {
-            Execute(db, "CREATE TABLE attachments(id TEXT PRIMARY KEY,task_id TEXT REFERENCES Tasks(Id) ON DELETE CASCADE,stored_relative_path TEXT);");
             using var insert = db.CreateCommand();
-            insert.CommandText = "INSERT INTO attachments VALUES('attachment',$id,'saved-copy.txt')";
+            insert.CommandText = "INSERT INTO attachments(id,task_id,stored_relative_path) VALUES('attachment',$id,'saved-copy.txt')";
             insert.Parameters.AddWithValue("$id", attached.Id.ToString());
             insert.ExecuteNonQuery();
         }
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => store.WriteAsync(tx =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.WriteAsync<int>(tx =>
         {
             tx.WriteSetting("rollback-evidence", "must not survive");
             if (bulk) tx.DeleteAllArchived(); else tx.Delete(attached.Id);
-            return 0;
+            throw new InvalidOperationException("simulate failure after deletion");
         }));
-        Assert.Equal("此日程含附件，暂时无法彻底删除", exception.Message);
         Assert.NotNull(await store.ReadAsync(tx => tx.Find(attached.Id)));
         Assert.NotNull(await store.ReadAsync(tx => tx.Find(other.Id)));
         Assert.Null(await store.ReadAsync(tx => tx.ReadSetting("rollback-evidence")));
@@ -47,12 +45,18 @@ public sealed class AttachmentDeletionGuardTests : IDisposable
         }
         Assert.Equal("source evidence", await File.ReadAllTextAsync(source));
         Assert.Equal("copy evidence", await File.ReadAllTextAsync(copy));
+        Assert.Empty(await store.ReadAsync(tx => tx.ListPendingCleanup()));
+        await store.WriteAsync(tx => { if (bulk) tx.DeleteAllArchived(); else tx.Delete(attached.Id); return 0; });
+        Assert.Null(await store.ReadAsync(tx => tx.Find(attached.Id)));
+        Assert.Equal("saved-copy.txt", Assert.Single(await store.ReadAsync(tx => tx.ListPendingCleanup())).StoredRelativePath);
+        Assert.Equal("source evidence", await File.ReadAllTextAsync(source));
+        Assert.Equal("copy evidence", await File.ReadAllTextAsync(copy));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task TasksWithoutAttachmentTableCanStillBeDeleted(bool bulk)
+    public async Task TasksWithoutAttachmentsCanStillBeDeleted(bool bulk)
     {
         await using var store = new SqliteTaskStore(root);
         await store.InitializeAsync();
@@ -72,9 +76,8 @@ public sealed class AttachmentDeletionGuardTests : IDisposable
         await store.WriteAsync(tx => { tx.Save(active); tx.Save(archived); return 0; });
         using (var db = Open(store.DatabasePath))
         {
-            Execute(db, "CREATE TABLE attachments(id TEXT PRIMARY KEY,task_id TEXT REFERENCES Tasks(Id),stored_relative_path TEXT);");
             using var insert = db.CreateCommand();
-            insert.CommandText = "INSERT INTO attachments VALUES('active-attachment',$id,'active.txt')";
+            insert.CommandText = "INSERT INTO attachments(id,task_id,stored_relative_path) VALUES('active-attachment',$id,'active.txt')";
             insert.Parameters.AddWithValue("$id", active.Id.ToString());
             insert.ExecuteNonQuery();
         }

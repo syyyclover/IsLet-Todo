@@ -4,7 +4,7 @@ using TaskIsland.Domain;
 
 namespace TaskIsland.Infrastructure;
 
-internal sealed class SqliteTaskSession(SqliteConnection db, SqliteTransaction tx) : ITaskWriter
+internal sealed partial class SqliteTaskSession(SqliteConnection db, SqliteTransaction tx, TimeProvider? timeProvider = null) : ITaskWriter
 {
     public string? ReadSetting(string key)
     {
@@ -77,28 +77,15 @@ internal sealed class SqliteTaskSession(SqliteConnection db, SqliteTransaction t
     }
     public void Delete(Guid id)
     {
-        EnsureNoAttachments(id);
+        QueueTaskCopies("task_id=$id", ("$id", id.ToString()));
         using var command = Command("DELETE FROM Tasks WHERE Id=$id", ("$id", id.ToString()));
         command.ExecuteNonQuery();
     }
     public void DeleteAllArchived()
     {
-        EnsureNoAttachments(null);
+        QueueTaskCopies("task_id IN (SELECT Id FROM Tasks WHERE ArchivedAtUtc IS NOT NULL)");
         using var command = Command("DELETE FROM Tasks WHERE ArchivedAtUtc IS NOT NULL");
         command.ExecuteNonQuery();
-    }
-
-    private void EnsureNoAttachments(Guid? taskId)
-    {
-        // Migrated databases can retain legacy attachment records. Until M4 coordinates
-        // transactions with its cleanup queue, neither cascade nor orphan those copies.
-        using var table = Command("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='attachments' COLLATE NOCASE)");
-        if (Convert.ToInt64(table.ExecuteScalar()) == 0) return;
-        using var attached = taskId is { } id
-            ? Command("SELECT EXISTS(SELECT 1 FROM attachments WHERE task_id=$id)", ("$id", id.ToString()))
-            : Command("SELECT EXISTS(SELECT 1 FROM attachments AS a JOIN Tasks AS t ON a.task_id=t.Id WHERE t.ArchivedAtUtc IS NOT NULL)");
-        if (Convert.ToInt64(attached.ExecuteScalar()) != 0)
-            throw new InvalidOperationException("此日程含附件，暂时无法彻底删除");
     }
 
     private List<TaskItem> QueryTasks(string sql, params (string Key, object? Value)[] parameters)

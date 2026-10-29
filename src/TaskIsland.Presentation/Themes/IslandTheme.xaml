@@ -37,7 +37,7 @@
  <Style TargetType="ListBoxItem"><Setter Property="ToolTipService.IsEnabled" Value="False"/>
   <Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,2"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
-   <Border x:Name="Row" CornerRadius="8" Background="#222631" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
+   <Border x:Name="Row" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Background="#222631" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
    <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="#2C3240"/></Trigger><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource IslandAccent}"/><Setter TargetName="Row" Property="BorderThickness" Value="1"/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>

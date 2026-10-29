@@ -18,6 +18,7 @@ public partial class App : System.Windows.Application
     private IslandWindow? island;
     private SqliteTaskStore? taskStore;
     private TaskIsland.Application.TaskScheduler? scheduler;
+    private AttachmentService? attachments;
     private bool tasksReady;
     private string? pendingActivation;
     private string? integrationWarning;
@@ -73,7 +74,7 @@ public partial class App : System.Windows.Application
             MainWindow = island;
             tray = new TrayService(() => Dispatch(() => island.OpenTasks(true)),
                 () => Dispatch(() => island.OpenSettings()), () => Dispatch(() => island.OpenArchive()),
-                () => Dispatch(Shutdown));
+                () => Dispatch(() => island.RequestExit()));
             island.Show();
             try { island.StartFullscreenMonitoring(); } catch (Exception ex) { WriteDiagnostic("fullscreen", ex); integrationWarning = "全屏检测不可用"; }
             WriteEvent($"startup.window {startupWatch.ElapsedMilliseconds}ms");
@@ -81,7 +82,11 @@ public partial class App : System.Windows.Application
             taskStore = new SqliteTaskStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TaskIsland"));
             await taskStore.InitializeAsync();
             if (Dispatcher.HasShutdownStarted) return;
-            var taskService = new TaskService(taskStore, TimeProvider.System);
+            var mutationGate = new TaskMutationGate();
+            var taskService = new TaskService(taskStore, TimeProvider.System, mutationGate);
+            attachments = new AttachmentService(taskStore, new ManagedAttachmentFiles(Path.GetDirectoryName(taskStore.DatabasePath)!), TimeProvider.System, mutationGate);
+            island.AttachAttachments(attachments);
+            if (!await attachments.RetryCleanupAsync()) integrationWarning = "部分附件仍在等待清理";
             await taskService.ReconcileTimeAsync();
             await island.AttachTasksAsync(taskService);
             if (Dispatcher.HasShutdownStarted) return;
@@ -94,6 +99,7 @@ public partial class App : System.Windows.Application
             else if (integrationWarning is { } warning) island.ShowError(warning);
             var reminderDispatcher = new ReminderDispatcher(taskService, taskStore, notifications, TimeProvider.System);
             scheduler = new(taskService, TimeProvider.System, reminderDispatcher);
+            attachments.Changed += scheduler.RequestReconcile;
             scheduler.CycleCompleted += () => Dispatcher.BeginInvoke(CheckReminderStatus);
             scheduler.Failed += ex => Dispatcher.BeginInvoke(() => { WriteDiagnostic("scheduler", ex); island.ShowError("时间校准暂时失败，将在下次校准时重试。"); });
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
@@ -168,7 +174,7 @@ public partial class App : System.Windows.Application
         SystemEvents.TimeChanged -= OnSystemTimeChanged;
         tray?.Dispose();
         instance?.Dispose();
-        try { scheduler?.DisposeAsync().AsTask().GetAwaiter().GetResult(); taskStore?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        try { scheduler?.DisposeAsync().AsTask().GetAwaiter().GetResult(); attachments?.WaitForIdleAsync().GetAwaiter().GetResult(); taskStore?.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
         catch (Exception ex) { WriteDiagnostic("data-shutdown", ex); }
         try { notifications?.Dispose(); } catch (Exception ex) { WriteDiagnostic("notification-unregister", ex); }
         base.OnExit(e);

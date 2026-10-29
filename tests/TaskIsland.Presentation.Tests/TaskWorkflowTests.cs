@@ -43,6 +43,7 @@ public class TaskWorkflowTests : IAsyncLifetime
         model.AddCommand.Execute(null); model.EditorTitle = " ";
         await model.SaveCommand.ExecuteAsync(null);
         Assert.Equal(" ", model.EditorTitle); Assert.Empty(model.Tasks); Assert.True(model.IsError);
+        Assert.Equal("请输入日程内容。", model.ErrorMessage);
         model.EditorTitle = "修正后保存"; await model.SaveCommand.ExecuteAsync(null);
         Assert.Single(model.Tasks);
     }
