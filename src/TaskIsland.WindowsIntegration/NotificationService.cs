@@ -17,10 +17,18 @@ public sealed class NotificationService : IReminderSender, IDisposable
         if (registered) return;
         try
         {
+            var executablePath = Environment.ProcessPath ?? throw new InvalidOperationException("无法确定通知应用路径");
+            if (NotificationPreferenceGuard.IsLegacyDisabled(executablePath))
+            {
+                Error = "系统通知此前已关闭，请在系统设置中确认通知偏好";
+                Report(() => "notification.registration_skipped previous_preference_disabled");
+                return;
+            }
+            NotificationIdentity.EnsureRegistered(executablePath);
             AppNotificationManager.Default.NotificationInvoked += OnInvoked;
             AppNotificationManager.Default.Register();
             registered = true; Error = null;
-            Report(() => $"notification.register supported={AppNotificationManager.IsSupported()} setting={AppNotificationManager.Default.Setting}");
+            Report(() => $"notification.register identity={NotificationIdentity.AppUserModelId} supported={AppNotificationManager.IsSupported()} setting={AppNotificationManager.Default.Setting}");
         }
         catch (Exception ex)
         {
