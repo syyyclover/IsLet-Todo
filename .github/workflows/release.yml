@@ -1,6 +1,7 @@
 name: Windows preview release
 on:
   push:
+    branches: [main, codex/fix-preview-release]
     tags: ['v0.*']
   workflow_dispatch:
 permissions:
