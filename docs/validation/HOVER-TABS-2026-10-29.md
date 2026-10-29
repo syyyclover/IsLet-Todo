@@ -16,6 +16,6 @@
 - 首次全套 Release：Domain 19、Application 20、Infrastructure 56、WindowsIntegration 23 均通过；Presentation 73 通过、1 失败。失败为既有开合动画单调性测试 `CompletingMotionNeverPublishesOppositeShape(expanding: true)`；失败原因尚未确定，不据此宣称开合完全无回归。
 - 单独重跑该开合测试的展开/收起两种情况：2 项通过。
 - 全套 Release 重跑：192 项通过（Domain 19、Application 20、Infrastructure 56、WindowsIntegration 23、Presentation 74），无失败及跳过。
-- `dotnet publish ... -c Release -r win-x64 --self-contained true --no-restore` 发布成功，未修改依赖。退出旧版后更新原发布路径，程序集 SHA256 与暂存发布一致。原路径新版已启动（PID 34588）；实际鼠标体验待联合验证。
+- `dotnet publish ... -c Release -r win-x64 --self-contained true --no-restore` 发布成功，未修改依赖。退出旧版后更新原发布路径，程序集 SHA256 与暂存发布一致。原路径新版已启动（PID 34588）；用户联合验证答复“都正常”：无需点击悬停切页、快速往返滑动及编辑草稿通过添加入口继续均通过。
 
-开合动画实现未改动。真实悬停切换手感、快速往返、其他应用焦点及减少动画仍需 Windows 联合体验；既有 DPI、干净机器和性能门槛继续保留。
+开合动画实现未改动。真实悬停切换、快速往返及草稿继续已通过用户体验；其他应用焦点及减少动画仍需 Windows 联合体验；既有 DPI、干净机器和性能门槛继续保留。
