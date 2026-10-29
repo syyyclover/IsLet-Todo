@@ -1,4 +1,4 @@
-param([string]$PublishDirectory = 'artifacts/publish/m3-win-x64', [ValidateRange(5,3600)][int]$Seconds = 300)
+param([string]$PublishDirectory = 'artifacts/publish/m4-win-x64', [ValidateRange(5,3600)][int]$Seconds = 300)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $exe = Join-Path (Join-Path $root $PublishDirectory) 'TaskIsland.exe'

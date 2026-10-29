@@ -1,4 +1,4 @@
-param([string]$PublishDirectory = 'artifacts/publish/m3-win-x64', [int]$ExistingPid = 0)
+param([string]$PublishDirectory = 'artifacts/publish/m4-win-x64', [int]$ExistingPid = 0)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System; using System.Runtime.InteropServices; using System.Text;
