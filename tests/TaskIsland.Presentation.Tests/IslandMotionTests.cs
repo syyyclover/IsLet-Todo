@@ -179,6 +179,9 @@ public class IslandMotionTests(ITestOutputHelper output)
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
                 window = new IslandWindow(new NotificationService());
                 window.Show();
+                // Native pointer traffic from the user's desktop must not reverse synthetic test motions.
+                // Explicit routed events and native close/style tests remain available below.
+                HwndSource.FromHwnd(new WindowInteropHelper(window).Handle).AddHook(IgnoreExternalPointer);
                 Pump(300);
                 check(window);
             }
@@ -195,6 +198,12 @@ public class IslandMotionTests(ITestOutputHelper output)
         thread.Start();
         if (!thread.Join(TimeSpan.FromSeconds(15))) throw new TimeoutException("WPF test dispatcher did not finish");
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    private static nint IgnoreExternalPointer(nint window, int message, nint wParam, nint lParam, ref bool handled)
+    {
+        if (message == 0x0084) { handled = true; return -1; }
+        return 0;
     }
 
     internal static void Pump(int milliseconds)

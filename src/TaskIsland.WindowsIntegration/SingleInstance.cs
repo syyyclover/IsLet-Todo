@@ -8,6 +8,7 @@ namespace TaskIsland.WindowsIntegration;
 public sealed class SingleInstance : IDisposable
 {
     private readonly Mutex marker;
+    private readonly Mutex? installationMarker;
     private readonly CancellationTokenSource shutdown = new();
     private readonly string pipeName;
     private Task? listener;
@@ -21,6 +22,7 @@ public sealed class SingleInstance : IDisposable
         pipeName = $"{applicationId}.{user}";
         marker = new Mutex(false, $"Local\\{pipeName}", out var created);
         IsPrimary = created;
+        if (applicationId == "TaskIsland") installationMarker = new Mutex(false, @"Local\TaskIsland.Resident");
     }
 
     public void Listen()
@@ -75,6 +77,7 @@ public sealed class SingleInstance : IDisposable
         // No UI work is awaited by the listener; cancellation unblocks pending pipe I/O.
         listener?.GetAwaiter().GetResult();
         marker.Dispose();
+        installationMarker?.Dispose();
         shutdown.Dispose();
     }
 }

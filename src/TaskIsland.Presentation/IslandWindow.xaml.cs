@@ -59,6 +59,7 @@ public partial class IslandWindow : Window
         if (notifications.Error is not null) model.Status = notifications.Error;
         SourceInitialized += (_, _) =>
         {
+            TrayWindowStyle.Apply(new WindowInteropHelper(this).Handle);
             source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             source.AddHook(WindowMessages);
             RefreshViewport();
@@ -351,6 +352,7 @@ public partial class IslandWindow : Window
         }
         // Hover-expanded windows should not become active merely when Windows asks about mouse activation.
         if (message == 0x0021) { handled = true; return 3; } // MA_NOACTIVATE; buttons explicitly activate on click.
+        if (message == 0x0010) { handled = true; CollapseToTasks(); return 0; } // Shell/Alt+F4 close keeps the tray resident. Tray exit calls RequestExit.
         return 0;
     }
     private void RefreshViewport()

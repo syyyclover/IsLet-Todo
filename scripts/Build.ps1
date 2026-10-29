@@ -12,11 +12,11 @@ try {
     & $dotnet build TaskIsland.slnx -c $Configuration --no-restore
     if ($LASTEXITCODE) { throw 'Build failed' }
     if ($Publish) {
-        $publishPath = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts/publish/m4-win-x64'))
+        $publishPath = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts/publish/current'))
         $artifactRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts')) + [IO.Path]::DirectorySeparatorChar
         if (-not $publishPath.StartsWith($artifactRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid publish path' }
         if (Test-Path -LiteralPath $publishPath) { Remove-Item -LiteralPath $publishPath -Recurse -Force }
-        & $dotnet publish src/TaskIsland.Presentation -c $Configuration -r win-x64 --self-contained true --no-restore -o artifacts/publish/m4-win-x64
+        & $dotnet publish src/TaskIsland.Presentation -c $Configuration -r win-x64 --self-contained true --no-restore -o artifacts/publish/current
         if ($LASTEXITCODE) { throw 'Publish failed' }
     }
 } finally { Pop-Location }

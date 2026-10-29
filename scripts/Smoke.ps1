@@ -1,4 +1,4 @@
-param([string]$PublishDirectory = 'artifacts/publish/m4-win-x64', [int]$ExistingPid = 0)
+param([string]$PublishDirectory = 'artifacts/publish/current', [int]$ExistingPid = 0)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System; using System.Runtime.InteropServices; using System.Text;
@@ -41,9 +41,10 @@ try {
     if ($primary.HasExited) { throw 'Primary exited during forwarding' }
     'Second launch forwarding: PASS'
     [void][IslandSmokeNative]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
-    if (-not $primary.WaitForExit(5000)) { throw 'Closing island did not terminate primary within 5 seconds' }
-    if ($null -ne $primary.ExitCode -and $primary.ExitCode -ne 0) { throw "Primary failed on exit: $($primary.ExitCode)" }
-    'Window close and process cleanup: PASS'
+    Start-Sleep -Milliseconds 500
+    $primary.Refresh()
+    if ($primary.HasExited) { throw 'Shell close terminated the tray resident' }
+    'Shell close keeps tray resident: PASS'
 } finally {
     foreach ($process in @($secondary, $primary)) {
         if ($process) {
@@ -55,7 +56,7 @@ try {
                     [void]$process.WaitForExit(5000)
                 }
                 $process.Refresh()
-                if (-not $process.HasExited) { Write-Warning "Process $($process.Id) remains running; exit through the tray after pending writes finish." }
+                if (-not $process.HasExited) { Write-Output "Process $($process.Id) remains resident; exit through the tray after pending writes finish." }
             }
         }
     }

@@ -73,8 +73,7 @@ public partial class App : System.Windows.Application
             island = new IslandWindow(notifications);
             MainWindow = island;
             tray = new TrayService(() => Dispatch(() => island.OpenTasks(true)),
-                () => Dispatch(() => island.OpenSettings()), () => Dispatch(() => island.OpenArchive()),
-                () => Dispatch(() => island.RequestExit()));
+                () => Dispatch(() => island.RequestExit()), () => Dispatch(OpenBackupDirectory));
             island.Show();
             try { island.StartFullscreenMonitoring(); } catch (Exception ex) { WriteDiagnostic("fullscreen", ex); integrationWarning = "全屏检测不可用"; }
             WriteEvent($"startup.window {startupWatch.ElapsedMilliseconds}ms");
@@ -116,6 +115,16 @@ public partial class App : System.Windows.Application
     }
 
     private void Dispatch(Action action) => Dispatcher.BeginInvoke(action);
+    private void OpenBackupDirectory()
+    {
+        try
+        {
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TaskIsland", "backups");
+            Directory.CreateDirectory(directory);
+            Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+        }
+        catch (Exception ex) { WriteDiagnostic("open-backups", ex); island?.ShowError("备份文件目录打开失败，请重试"); island?.OpenTasks(false); }
+    }
     private async Task RouteNotificationAsync(string argument)
     {
         if (instance?.IsPrimary != false) { HandleActivation(argument); return; }

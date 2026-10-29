@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-2026-10-29：已进入 M4，附件基础流程已接入，192 项自动化测试通过。空内容保存仅显示中文；鼠标进入/离开立即启动原有开合动画；附件拖入、数量显示和打开已通过用户联合验证。支持后台独立副本、限额、取消、预览和待清理队列，数据库 schema v3。完整图片编码、复制中退出与异常场景、DPI、干净机器及性能门槛仍待验收，当前不是完整 v1 发布版。
+2026-10-29：已进入 M4，附件基础流程已接入，196 项自动化测试通过。空内容保存仅显示中文；鼠标进入/离开立即启动原有开合动画；附件拖入、数量显示和打开已通过用户联合验证。支持后台独立副本、限额、取消、预览和待清理队列，数据库 schema v3。完整图片编码、复制中退出与异常场景、DPI、干净机器及性能门槛仍待验收，当前不是完整 v1 发布版。
 
 普通操作状态文字与悬停提示已移除，改为统一的小幅动效；错误与必要确认仍在岛内显示。详见 [操作反馈验证](docs/validation/QUIET-FEEDBACK-2026-10-29.md)。
 
@@ -16,7 +16,9 @@
 
 M4 基础流程记录见 [M4 验证](docs/validation/M4-2026-10-29.md)。
 
-最新验证包：`artifacts/publish/m4-win-x64/TaskIsland.exe`。先从托盘退出旧版再启动，避免单实例将启动转发给旧进程。详见 [M3 验证记录](docs/validation/M3-2026-10-28.md) 和 [通知身份修订验证](docs/validation/NOTIFICATION-IDENTITY-2026-10-29.md)。
+当前版本：0.4.0-preview.1；托盘常驻、任务栏/Alt+Tab 隐藏、菜单与备份目录已通过用户验证，见 [托盘验证记录](docs/validation/TRAY-2026-10-29.md)。
+
+最新验证包：`artifacts/publish/current/TaskIsland.exe`。先从托盘退出旧版再启动，避免单实例将启动转发给旧进程。详见 [M3 验证记录](docs/validation/M3-2026-10-28.md) 和 [通知身份修订验证](docs/validation/NOTIFICATION-IDENTITY-2026-10-29.md)。
 
 - [产品与技术需求基线](IsLet_Todo.md)：功能、交互、时间规则、数据模型及验收标准的事实来源。
 - [开发目标与阶段门槛](docs/DEVELOPMENT_PLAN.md)：范围、模块边界、执行顺序、交付物及风险。
@@ -42,10 +44,10 @@ M4 基础流程记录见 [M4 验证](docs/validation/M4-2026-10-29.md)。
 ```powershell
 ./scripts/Install-Sdk.ps1
 ./scripts/Build.ps1 -Publish
-./artifacts/publish/m4-win-x64/TaskIsland.exe
+./artifacts/publish/current/TaskIsland.exe
 ```
 
-`Build.ps1` 顺序执行锁定依赖还原、全部测试、构建和可选发布。发布会清理并重新创建 `artifacts/publish/m4-win-x64`，请先退出应用，不要在其中存放个人文件。无任务时顶部显示“暂无日程”；展开后添加和管理任务，托盘提供设置、归档与退出。新建时可通过滚轮选择结束时间，位置与动画设置自动保存；登录启动通过当前用户注册项设置。
+`Build.ps1` 顺序执行锁定依赖还原、全部测试、构建和可选发布。发布会清理并重新创建 `artifacts/publish/current`，请先退出应用，不要在其中存放个人文件。无任务时顶部显示“暂无日程”；展开后添加和管理任务，托盘提供设置、归档与退出。新建时可通过滚轮选择结束时间，位置与动画设置自动保存；登录启动通过当前用户注册项设置。
 
 ```powershell
 ./scripts/Smoke.ps1
@@ -53,9 +55,15 @@ M4 基础流程记录见 [M4 验证](docs/validation/M4-2026-10-29.md)。
 ./scripts/Build.ps1 -Configuration Debug
 ```
 
-Smoke 脚本启动并正常关闭自己创建的进程；资源测量完成后保留应用运行，请通过托盘退出。执行前请退出已有 IsLet-Todo。Debug 构建的岛内设置页提供测试通知按钮，Release 不包含该入口。数据库保存在 `%LOCALAPPDATA%\TaskIsland\data.db`，迁移备份保存在同一用户数据目录内；日志位于 `logs\integration.log`，不记录任务正文或来源文件路径。备份或移动整个数据目录前请正常退出应用，勿单独复制正在运行的数据库文件。
+Smoke 脚本检查第二次启动转发与系统关闭后继续托盘常驻；资源测量完成后保留应用运行，请通过托盘退出。执行前请退出已有 IsLet-Todo。Debug 构建的岛内设置页提供测试通知按钮，Release 不包含该入口。数据库保存在 `%LOCALAPPDATA%\TaskIsland\data.db`，迁移备份保存在同一用户数据目录内；日志位于 `logs\integration.log`，不记录任务正文或来源文件路径。备份或移动整个数据目录前请正常退出应用，勿单独复制正在运行的数据库文件。
 
 按用户继续开发指令推进 M2，同时保留 M1 未通过项。M2 发布目录为 205.52 MiB，超过 200 MiB 目标；启动与完整数据集性能仍需最终验收，不放宽预算。
+
+## 安装包与便携包
+
+`artifacts/release/` 包含当前版本安装包、便携 ZIP 与 SHA256 校验值。运行 `./scripts/Package.ps1` 可从 current 发布目录重新生成；脚本下载经固定 SHA256 校验的 Inno Setup 6.7.4，仅作开发工具。当前交付仍是预览版，完整 Windows 和性能门槛未完成。
+
+旧产物自动删除被主机策略拦截，尚未清除；手动运行 `./scripts/Clean-OldArtifacts.ps1` 可按固定清单清理旧发布、截图和临时诊断文件，保留当前版本及用户数据。源码和回归测试继续保留。
 
 ## 仓库
 
