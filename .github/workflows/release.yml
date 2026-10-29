@@ -28,5 +28,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $packages = @(Get-ChildItem artifacts/release -File | ForEach-Object FullName)
-          gh release create $env:GITHUB_REF_NAME @packages --verify-tag --prerelease --title "IsLet-Todo 0.4.0 Preview 1" --notes-file docs/PREVIEW-RELEASE.md
+          gh release create $env:GITHUB_REF_NAME @packages --verify-tag --prerelease --title "IsLet-Todo $env:GITHUB_REF_NAME" --notes-file docs/PREVIEW-RELEASE.md
           if ($LASTEXITCODE) { throw 'Preview release upload failed' }

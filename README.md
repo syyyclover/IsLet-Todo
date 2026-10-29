@@ -1,72 +1,75 @@
 # IsLet-Todo
 
-常驻 Windows 屏幕顶部的本地日程工具，项目代号 **TaskIsland**。通过灵动岛完成日程查看、编辑、提醒、归档和附件管理，强调低打扰、低资源占用和本地数据可靠性。
+常驻 Windows 屏幕顶部的本地日程岛。鼠标移入展开，离开收起；日程、归档和设置通过悬停页签切换。
 
-## 当前状态
+## 下载与版本
 
-2026-10-29：已进入 M4，附件基础流程已接入，196 项自动化测试通过。空内容保存仅显示中文；鼠标进入/离开立即启动原有开合动画；附件拖入、数量显示和打开已通过用户联合验证。支持后台独立副本、限额、取消、预览和待清理队列，数据库 schema v3。完整图片编码、复制中退出与异常场景、DPI、干净机器及性能门槛仍待验收，当前不是完整 v1 发布版。
+**当前交付修订：0.4.0-preview.2（2026-10-29），Windows 11 x64。**
 
-普通操作状态文字与悬停提示已移除，改为统一的小幅动效；错误与必要确认仍在岛内显示。详见 [操作反馈验证](docs/validation/QUIET-FEEDBACK-2026-10-29.md)。
+GitHub 下载正在修复发布流程，确认附件上传后补充直达链接。本地交付文件位于 `artifacts/release/`：
 
-日程、归档、设置页签支持悬停即时切换，保留左右滑动与后台草稿，见 [悬停页签验证](docs/validation/HOVER-TABS-2026-10-29.md)。
+- `IsLet-Todo-0.4.0-preview.2-setup-x64.exe`：安装版，普通用户权限，无需管理员。
+- `IsLet-Todo-0.4.0-preview.2-portable-x64.zip`：便携版，解压后运行 `TaskIsland.exe`。
+- `SHA256SUMS.txt`：对应本版本两个下载文件的校验值。
 
-安全确认已改同控件双击；所有页面离开后回到日程列表并收起，草稿在后台保留；完成与归档合并，归档动作清理附件副本，来源文件保留。详见 [修订记录](docs/validation/DOUBLE-CONFIRM-2026-10-29.md)。
+0.4.0-preview.2 修正发布流程、版本校验与说明文档，保留已验证的托盘及岛内交互。软件仍为预览版，尚未完成全部 Windows 和性能验收。
 
-## 文档入口
+## 已实现
 
-M4 基础流程记录见 [M4 验证](docs/validation/M4-2026-10-29.md)。
+- **托盘常驻**：任务栏及 Alt+Tab 不显示；Alt+F4 只收起，通过托盘“退出”结束程序。
+- **托盘菜单**：仅“退出”和“打开备份文件目录”；使用深色菜单与约 7 KiB 的多尺寸图标。
+- **悬停切页**：鼠标移入“日程 / 归档 / 设置”立即切换，沿用左右滑动。
+- **编辑与时间**：添加、编辑日程，日期/小时/分钟滚轮；浏览页面保留草稿，通过“添加日程”继续。
+- **提醒与归档**：到期 Windows 通知，点击定位；续期、置顶、完成归档和恢复。
+- **附件独立副本**：拖到具体日程上添加；完成或归档后清理应用副本，保留来源文件；占用时排队重试。
+- **统一交互**：删除等安全操作双击确认；普通成功反馈采用短动效，无悬停提示词。
 
-当前版本：0.4.0-preview.1；托盘常驻、任务栏/Alt+Tab 隐藏、菜单与备份目录已通过用户验证，见 [托盘验证记录](docs/validation/TRAY-2026-10-29.md)。
+## 安装、更新与使用
 
-最新验证包：`artifacts/publish/current/TaskIsland.exe`。先从托盘退出旧版再启动，避免单实例将启动转发给旧进程。详见 [M3 验证记录](docs/validation/M3-2026-10-28.md) 和 [通知身份修订验证](docs/validation/NOTIFICATION-IDENTITY-2026-10-29.md)。
+更新或安装前，保存内容并从旧版托盘退出；软件不会自动覆盖正在运行的程序。
 
-- [产品与技术需求基线](IsLet_Todo.md)：功能、交互、时间规则、数据模型及验收标准的事实来源。
-- [开发目标与阶段门槛](docs/DEVELOPMENT_PLAN.md)：范围、模块边界、执行顺序、交付物及风险。
-- [Agent 开发规则](AGENTS.md)：代码与协作约束，每次开发前阅读。
-- [M1 验证记录](docs/validation/M1-2026-10-28.md)：执行命令、实测结果及阶段阻断项。
-- [M2 验证记录](docs/validation/M2-2026-10-28.md)：任务、SQLite、调度、界面回归与当前限制。
-- [M2 添加入口与样式修复](docs/validation/M2-UI-2026-10-28.md)：历史数据库兼容、主要入口和统一控件验证。
-- [悬停动画修复记录](docs/validation/MOTION-2026-10-28.md)：20→2 次窗口尺寸变化、回归与未验证项。
-- [开合闪动修复记录](docs/validation/FLASH-2026-10-28.md)：固定原生表面的取舍与动画终值回归。
+安装版默认安装到 `%LOCALAPPDATA%\Programs\IsLet-Todo`。便携版解压到固定文件夹即可，两种版本均使用同一个当前用户数据目录，并实行单实例。
 
-## 首版方向
+鼠标移入顶部岛展开，点击“添加日程”输入；可用滚轮选择结束时间。将文件拖到具体日程行添加附件。鼠标离开任意页面后返回日程列表并收起。托盘左键展开岛，右键可退出或打开备份目录。
 
-- Windows 11 x64；简体中文，固定深色主题，普通用户权限。
-- C# / .NET 10 / WPF / MVVM；SQLite 本地存储。
-- Windows Forms 托盘、Windows App SDK 通知、Windows 原生单实例及窗口集成。
-- xUnit 自动化测试；Windows x64 自包含、未打包目录发布。
-- 单机使用，首版不包含账号、云同步、重复任务、AI 或自动更新。
+## 数据与备份
 
-## 构建与运行
+用户数据保存在 `%LOCALAPPDATA%\TaskIsland\`：
 
-在 Windows 11 x64 上使用 `global.json` 指定的 .NET 10 SDK。若本机没有该 SDK，可用项目本地安装脚本，不修改全局 SDK：
+| 内容 | 位置 |
+|---|---|
+| 日程和设置 | `data.db` |
+| 附件副本 | `attachments/` |
+| 数据库迁移前备份 | `backups/` |
+| 运行诊断 | `logs/` |
+
+备份文件夹可能为空，它目前存放数据库迁移前的一致性备份，并非定时备份。手动备份请先退出软件，再复制整个数据目录。卸载不删除上述用户数据。
+
+## 验证范围
+
+已由用户验证：通知出现与点击定位、附件添加与打开、拖动移出收起、悬停切页与草稿继续、托盘常驻与菜单。上轮本机 Release 196 项自动化测试通过；本次远程发布验证结果见 [交付修订记录](docs/validation/DELIVERY-2026-10-29.md)。
+
+仍待完成：完整安装卸载矩阵、干净 Windows 运行、多 DPI/多显示器/全屏/Explorer 重启、完整附件异常矩阵及 8 小时运行。程序展开目录约 206 MiB，仍超过 200 MiB 目标；安装包尚未签名。
+
+## 从源码构建
+
+使用 `global.json` 指定的 .NET 10 SDK：
 
 ```powershell
 ./scripts/Install-Sdk.ps1
 ./scripts/Build.ps1 -Publish
-./artifacts/publish/current/TaskIsland.exe
+./scripts/Package.ps1
 ```
 
-`Build.ps1` 顺序执行锁定依赖还原、全部测试、构建和可选发布。发布会清理并重新创建 `artifacts/publish/current`，请先退出应用，不要在其中存放个人文件。无任务时顶部显示“暂无日程”；展开后添加和管理任务，托盘提供设置、归档与退出。新建时可通过滚轮选择结束时间，位置与动画设置自动保存；登录启动通过当前用户注册项设置。
+运行目录为 `artifacts/publish/current/`，安装包和便携包位于 `artifacts/release/`。打包前会核对程序实际版本，防止旧程序被包装成新版本。安装编译器为经固定 SHA256 校验的 Inno Setup 6.7.4，仅用于开发，不进入软件包。
 
-```powershell
-./scripts/Smoke.ps1
-./scripts/Measure-Idle.ps1 -Seconds 300
-./scripts/Build.ps1 -Configuration Debug
-```
+源码、回归测试和开发记录保留。旧产物自动删除此前被主机策略拒绝；如需手动清理已清点的旧版本，可运行 `./scripts/Clean-OldArtifacts.ps1`，该脚本不包含当前版本和用户数据。
 
-Smoke 脚本检查第二次启动转发与系统关闭后继续托盘常驻；资源测量完成后保留应用运行，请通过托盘退出。执行前请退出已有 IsLet-Todo。Debug 构建的岛内设置页提供测试通知按钮，Release 不包含该入口。数据库保存在 `%LOCALAPPDATA%\TaskIsland\data.db`，迁移备份保存在同一用户数据目录内；日志位于 `logs\integration.log`，不记录任务正文或来源文件路径。备份或移动整个数据目录前请正常退出应用，勿单独复制正在运行的数据库文件。
+## 开发文档
 
-按用户继续开发指令推进 M2，同时保留 M1 未通过项。M2 发布目录为 205.52 MiB，超过 200 MiB 目标；启动与完整数据集性能仍需最终验收，不放宽预算。
+- [需求基线](IsLet_Todo.md)
+- [开发计划与未完成门槛](docs/DEVELOPMENT_PLAN.md)
+- [项目规则](AGENTS.md)
+- [托盘与打包验证](docs/validation/TRAY-2026-10-29.md)
 
-## 安装包与便携包
-
-`artifacts/release/` 包含当前版本安装包、便携 ZIP 与 SHA256 校验值。运行 `./scripts/Package.ps1` 可从 current 发布目录重新生成；脚本下载经固定 SHA256 校验的 Inno Setup 6.7.4，仅作开发工具。当前交付仍是预览版，完整 Windows 和性能门槛未完成。
-
-旧产物自动删除被主机策略拦截，尚未清除；手动运行 `./scripts/Clean-OldArtifacts.ps1` 可按固定清单清理旧发布、截图和临时诊断文件，保留当前版本及用户数据。源码和回归测试继续保留。
-
-## 仓库
-
-- GitHub：<https://github.com/syyyclover/IsLet-Todo>
-- SSH：`git@github.com:syyyclover/IsLet-Todo.git`
-- 主分支：`main`。后续功能使用短期分支，经验证后集成。
+项目使用 C#、.NET 10、WPF、SQLite 和 Windows App SDK。主分支为 `main`；仓库地址为 [syyyclover/IsLet-Todo](https://github.com/syyyclover/IsLet-Todo)。

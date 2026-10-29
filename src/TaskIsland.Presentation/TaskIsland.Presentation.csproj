@@ -6,10 +6,11 @@
   <WindowsPackageType>None</WindowsPackageType><WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   <ApplicationManifest>app.manifest</ApplicationManifest>
   <ApplicationIcon>../TaskIsland.WindowsIntegration/Assets/islet.ico</ApplicationIcon>
-  <Version>0.4.0-preview.1</Version>
+  <Version>0.4.0-preview.2</Version>
   <SatelliteResourceLanguages>zh-Hans;en-US</SatelliteResourceLanguages>
  </PropertyGroup>
  <ItemGroup>
+  <InternalsVisibleTo Include="TaskIsland.Presentation.Tests" />
   <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.4" />
   <ProjectReference Include="../TaskIsland.WindowsIntegration/TaskIsland.WindowsIntegration.csproj" />

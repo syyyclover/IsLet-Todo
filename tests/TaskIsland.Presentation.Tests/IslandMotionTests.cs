@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using TaskIsland.Presentation;
 using TaskIsland.WindowsIntegration;
@@ -168,7 +169,21 @@ public class IslandMotionTests(ITestOutputHelper output)
         Assert.Equal(0, content.Opacity);
     });
 
-    internal static void RunSta(Action<IslandWindow> check)
+    [Fact]
+    public void SystemReducedMotionUsesImmediateStatesEvenWhenAppAnimationsAreEnabled() => RunSta(window =>
+    {
+        Assert.True(((IslandViewModel)window.DataContext).AnimationsEnabled);
+        window.OpenTasks(false);
+        var clip = (RectangleGeometry)window.FindName("IslandClip");
+        Assert.Equal(360, clip.Rect.Width);
+        window.OpenArchive();
+        Assert.Equal(0, ((TranslateTransform)((FrameworkElement)window.FindName("ArchivePanel")).RenderTransform).X);
+        window.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent });
+        Assert.Equal(240, clip.Rect.Width);
+        Assert.Equal(Visibility.Hidden, ((FrameworkElement)window.FindName("ContentPanel")).Visibility);
+    }, systemAnimationsEnabled: false);
+
+    internal static void RunSta(Action<IslandWindow> check, bool systemAnimationsEnabled = true)
     {
         Exception? failure = null;
         var thread = new Thread(() =>
@@ -177,7 +192,8 @@ public class IslandMotionTests(ITestOutputHelper output)
             try
             {
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-                window = new IslandWindow(new NotificationService());
+                // Exercise each animation policy explicitly without changing the desktop's OS settings.
+                window = new IslandWindow(new NotificationService(), () => systemAnimationsEnabled);
                 window.Show();
                 // Native pointer traffic from the user's desktop must not reverse synthetic test motions.
                 // Explicit routed events and native close/style tests remain available below.

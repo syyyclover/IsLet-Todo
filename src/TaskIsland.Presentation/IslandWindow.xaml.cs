@@ -19,6 +19,7 @@ public partial class IslandWindow : Window
     private readonly IslandState state = new();
     private readonly IslandViewModel model = new();
     private readonly NotificationService notifications;
+    private readonly Func<bool> systemAnimationsEnabled;
     private HwndSource? source;
     private readonly IslandMotion motion;
     private IslandPage displayedPage = IslandPage.Tasks;
@@ -37,8 +38,11 @@ public partial class IslandWindow : Window
     public static readonly DependencyProperty IsCountdownRunningProperty = DependencyProperty.Register(nameof(IsCountdownRunning), typeof(bool), typeof(IslandWindow), new PropertyMetadata(false));
     public bool IsCountdownRunning { get => (bool)GetValue(IsCountdownRunningProperty); private set => SetValue(IsCountdownRunningProperty, value); }
 
-    public IslandWindow(NotificationService notifications)
+    public IslandWindow(NotificationService notifications) : this(notifications, static () => SystemParameters.ClientAreaAnimation) { }
+
+    internal IslandWindow(NotificationService notifications, Func<bool> systemAnimationsEnabled)
     {
+        this.systemAnimationsEnabled = systemAnimationsEnabled;
         InitializeComponent();
         motion = new IslandMotion(this, IslandSurface, IslandClip, HeaderOffset, ContentPanel, ContentOffset, PositionWindow);
         this.notifications = notifications;
@@ -214,7 +218,7 @@ public partial class IslandWindow : Window
     private void OnDismissError(object sender, RoutedEventArgs e) { model.IsError = false; model.Status = ""; }
     private Task PlayFeedbackAsync(Guid? id, OperationCue cue)
     {
-        var enabled = model.AnimationsEnabled && SystemParameters.ClientAreaAnimation && IsVisible;
+        var enabled = model.AnimationsEnabled && systemAnimationsEnabled() && IsVisible;
         FrameworkElement? target = null;
         if (cue == OperationCue.Delete && id is null) target = ArchiveList;
         else if (id is { } taskId)
@@ -293,7 +297,7 @@ public partial class IslandWindow : Window
     private void RenderState()
     {
         var expanded = state.Page != IslandPage.Collapsed;
-        IsCountdownRunning = expanded && state.Page == IslandPage.Tasks && model.AnimationsEnabled && SystemParameters.ClientAreaAnimation;
+        IsCountdownRunning = expanded && state.Page == IslandPage.Tasks && model.AnimationsEnabled && systemAnimationsEnabled();
         BackButton.Visibility = state.Page is IslandPage.Editor or IslandPage.Attachments ? Visibility.Visible : Visibility.Collapsed;
         // Keep the outgoing page arranged until its parent has faded and the shape has closed.
         if (expanded)
@@ -301,7 +305,7 @@ public partial class IslandWindow : Window
             SwitchPage(state.Page);
         }
         var area = DesktopPlacement.PrimaryWorkAreaInDips(new WindowInteropHelper(this).Handle);
-        motion.Transition(expanded, model.AnimationsEnabled && SystemParameters.ClientAreaAnimation, area, model.Anchor);
+        motion.Transition(expanded, model.AnimationsEnabled && systemAnimationsEnabled(), area, model.Anchor);
     }
 
     private void SwitchPage(IslandPage page)
@@ -321,7 +325,7 @@ public partial class IslandWindow : Window
         EditorPanel.Visibility = page == IslandPage.Editor ? Visibility.Visible : Visibility.Collapsed;
         foreach (var (button, destination) in new[] { (TasksTab, IslandPage.Tasks), (ArchiveTab, IslandPage.Archive), (SettingsTab, IslandPage.Settings) })
             button.Foreground = (Brush)FindResource(destination == page ? "IslandAccent" : "IslandMuted");
-        if (previous == page || !model.AnimationsEnabled || !SystemParameters.ClientAreaAnimation) return;
+        if (previous == page || !model.AnimationsEnabled || !systemAnimationsEnabled()) return;
         outgoing.Visibility = Visibility.Visible;
         var direction = Order(page) > Order(previous) ? 1 : -1;
         var duration = TimeSpan.FromMilliseconds(220);

@@ -1,5 +1,8 @@
 #ifndef AppVersion
-  #define AppVersion "0.4.0-preview.1"
+  #define AppVersion "0.4.0-preview.2"
+#endif
+#ifndef PublishDir
+  #define PublishDir "..\artifacts\publish\current"
 #endif
 [Setup]
 AppId={{89556E97-8D31-460D-89D0-43DA9B5C55E5}
@@ -25,7 +28,7 @@ RestartApplications=no
 AppMutex=Local\TaskIsland.Resident
 
 [Files]
-Source: "..\artifacts\publish\current\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{userprograms}\IsLet-Todo"; Filename: "{app}\TaskIsland.exe"; AppUserModelID: "TaskIsland.Desktop"

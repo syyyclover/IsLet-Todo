@@ -30,7 +30,7 @@ try {
         $artifactRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'artifacts')) + [IO.Path]::DirectorySeparatorChar
         if (-not $publishPath.StartsWith($artifactRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid publish path' }
         if (Test-Path -LiteralPath $publishPath) { Remove-Item -LiteralPath $publishPath -Recurse -Force }
-        & $dotnet publish src/TaskIsland.Presentation -c $Configuration -r win-x64 --self-contained true --no-restore -o artifacts/publish/current
+        & $dotnet publish src/TaskIsland.Presentation/TaskIsland.Presentation.csproj -c $Configuration -r win-x64 --self-contained true --no-restore -o artifacts/publish/current
         if ($LASTEXITCODE) { throw 'Publish failed' }
     }
 } finally { Pop-Location }
