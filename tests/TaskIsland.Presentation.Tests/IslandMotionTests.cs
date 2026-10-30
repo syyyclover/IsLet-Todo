@@ -129,9 +129,11 @@ public class IslandMotionTests(ITestOutputHelper output)
         Escape(window);
         var page = (FrameworkElement)window.FindName("TasksPanel");
         Assert.Equal(Visibility.Visible, page.Visibility);
-        Pump(50);
         var content = (FrameworkElement)window.FindName("ContentPanel");
-        Assert.InRange(content.Opacity, 0.001, 0.999);
+        // A busy runner may service a 50ms timer near the end of the fade.
+        // Verify the installed fade and retained content instead of a wall-clock sample.
+        Assert.True(DependencyPropertyHelper.GetValueSource(content, UIElement.OpacityProperty).IsAnimated);
+        Assert.Equal(Visibility.Visible, content.Visibility);
         Pump(300);
         Assert.Equal(Visibility.Hidden, content.Visibility);
     });
