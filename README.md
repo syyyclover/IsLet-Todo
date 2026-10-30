@@ -4,15 +4,15 @@
 
 ## 下载与版本
 
-**当前交付修订：0.4.0-preview.3（2026-10-30），Windows 11 x64。**
+**当前交付修订：0.4.0-preview.4（2026-10-30），Windows 11 x64。**
 
-[GitHub 下载页面](https://github.com/syyyclover/IsLet-Todo/releases/tag/v0.4.0-preview.3-build.3)（已发布）。本地交付文件位于 `artifacts/release/`：
+[GitHub 下载页面](https://github.com/syyyclover/IsLet-Todo/releases/tag/v0.4.0-preview.4)（已发布）。本地交付文件位于 `artifacts/release/`：
 
-- [安装包](https://github.com/syyyclover/IsLet-Todo/releases/download/v0.4.0-preview.3-build.3/IsLet-Todo-0.4.0-preview.3-setup-x64.exe)：安装版，普通用户权限，无需管理员。
-- [便携包](https://github.com/syyyclover/IsLet-Todo/releases/download/v0.4.0-preview.3-build.3/IsLet-Todo-0.4.0-preview.3-portable-x64.zip)：便携版，解压后运行 `TaskIsland.exe`。
+- [安装包](https://github.com/syyyclover/IsLet-Todo/releases/download/v0.4.0-preview.4/IsLet-Todo-0.4.0-preview.4-setup-x64.exe)：安装版，普通用户权限，无需管理员。
+- [便携包](https://github.com/syyyclover/IsLet-Todo/releases/download/v0.4.0-preview.4/IsLet-Todo-0.4.0-preview.4-portable-x64.zip)：便携版，解压后运行 `TaskIsland.exe`。
 - `SHA256SUMS.txt`：对应本版本两个下载文件的校验值。
 
-0.4.0-preview.3 修复中文输入法误收起与托盘退出失败，并修正发布流程、版本校验与说明文档，保留已验证的托盘及岛内交互。软件仍为预览版，尚未完成全部 Windows 和性能验收。
+0.4.0-preview.4 修复中文输入法误收起与托盘退出失败，并修正发布流程、版本校验与说明文档，保留已验证的托盘及岛内交互。软件仍为预览版，尚未完成全部 Windows 和性能验收。
 
 ## 已实现
 
@@ -63,7 +63,7 @@
 
 运行目录为 `artifacts/publish/current/`，安装包和便携包位于 `artifacts/release/`。打包前会核对程序实际版本，防止旧程序被包装成新版本。安装编译器为经固定 SHA256 校验的 Inno Setup 6.7.4，仅用于开发，不进入软件包。
 
-源码、回归测试和开发记录保留。旧产物自动删除此前被主机策略拒绝；如需手动清理已清点的旧版本，可运行 `./scripts/Clean-OldArtifacts.ps1`，该脚本不包含当前版本和用户数据。
+源码、回归测试和开发记录保留。目录按职责保留：`src/` 软件源码、`scripts/` 构建与打包、`installer/` 安装定义、`docs/` 开发与验收记录；`artifacts/publish/current/` 为唯一运行目录，`artifacts/release/` 为最新交付包。编译缓存、测试运行产物和旧版本在交付后清理；用户数据位于项目目录之外。
 
 ## 开发文档
 

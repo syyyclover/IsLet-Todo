@@ -37,3 +37,10 @@ jobs:
               if ($LASTEXITCODE) { throw 'Could not withdraw preview.2 with the known tray-exit defect' }
             }
           }
+          if ($env:GITHUB_REF_NAME -eq 'v0.4.0-preview.4') {
+            gh release view v0.4.0-preview.3-build.3 *> $null
+            if ($LASTEXITCODE -eq 0) {
+              gh release delete v0.4.0-preview.3-build.3 --yes
+              if ($LASTEXITCODE) { throw 'Could not remove superseded preview.3 release' }
+            }
+          }

@@ -16,6 +16,13 @@ namespace TaskIsland.Presentation;
 
 public partial class IslandWindow : Window
 {
+    static IslandWindow()
+    {
+        // ToolTipOpening is a direct event, so a handler on the window cannot catch child tooltips.
+        var suppress = new ToolTipEventHandler((_, e) => e.Handled = true);
+        EventManager.RegisterClassHandler(typeof(FrameworkElement), ToolTipService.ToolTipOpeningEvent, suppress, true);
+        EventManager.RegisterClassHandler(typeof(FrameworkContentElement), ToolTipService.ToolTipOpeningEvent, suppress, true);
+    }
     private readonly IslandState state = new();
     private readonly IslandViewModel model = new();
     private readonly NotificationService notifications;
