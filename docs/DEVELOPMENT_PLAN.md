@@ -16,7 +16,7 @@
 
 ## 规划模块与目录
 
-以下模块和对应测试均已创建；附件和完整系统能力仍按后续阶段实现。
+以下软件模块保留；2026-10-30 按用户明确要求删除测试源码与测试项目，删除前本轮 203 项测试通过。旧阶段测试结果作为历史证据保留，后续构建不再宣称执行自动测试。附件和完整系统能力仍按后续阶段实现。
 
 | 路径 | 职责 |
 |---|---|
@@ -25,9 +25,6 @@
 | `src/TaskIsland.Infrastructure/` | SQLite、迁移、文件副本、清理队列与日志 |
 | `src/TaskIsland.WindowsIntegration/` | 托盘、通知、单实例、IPC、自启动、显示器和全屏检测 |
 | `src/TaskIsland.Presentation/` | WPF 入口、依赖装配、状态机、ViewModel、界面与动画 |
-| `tests/TaskIsland.Domain.Tests/` | 模拟时间、排序与 Unicode 规则测试 |
-| `tests/TaskIsland.Application.Tests/` | 用例、调度、提醒版本和失败路径测试 |
-| `tests/TaskIsland.Infrastructure.Tests/` | SQLite、迁移、附件和文件清理集成测试 |
 | `docs/validation/` | 后续产生的 Windows 验收及性能实测记录 |
 
 依赖方向：Domain 不依赖 UI 或平台；Application 依赖 Domain 并定义端口；Infrastructure 和 WindowsIntegration 实现端口；Presentation 装配并调用用例。接口以基线第 3.3 节为准，任务、附件和调度职责拆开。
