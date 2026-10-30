@@ -126,16 +126,22 @@ public class IslandMotionTests(ITestOutputHelper output)
     {
         window.OpenTasks(false);
         Pump(300);
-        Escape(window);
         var page = (FrameworkElement)window.FindName("TasksPanel");
-        Assert.Equal(Visibility.Visible, page.Visibility);
         var content = (FrameworkElement)window.FindName("ContentPanel");
-        // A busy runner may service a 50ms timer near the end of the fade.
-        // Verify the installed fade and retained content instead of a wall-clock sample.
-        Assert.True(DependencyPropertyHelper.GetValueSource(content, UIElement.OpacityProperty).IsAnimated);
-        Assert.Equal(Visibility.Visible, content.Visibility);
-        Pump(300);
-        Assert.Equal(Visibility.Hidden, content.Visibility);
+        var hiddenBeforeFade = false;
+        var opacity = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(UIElement.OpacityProperty, typeof(FrameworkElement));
+        EventHandler observe = (_, _) => { if (content.Opacity > 0 && page.Visibility != Visibility.Visible) hiddenBeforeFade = true; };
+        opacity.AddValueChanged(content, observe);
+        try
+        {
+            Escape(window);
+            Assert.Equal(Visibility.Visible, page.Visibility);
+            Assert.Equal(Visibility.Visible, content.Visibility);
+            Pump(350);
+            Assert.False(hiddenBeforeFade, "Outgoing page was hidden while content was still visible");
+            Assert.Equal(Visibility.Hidden, content.Visibility);
+        }
+        finally { opacity.RemoveValueChanged(content, observe); }
     });
 
     [Fact]
