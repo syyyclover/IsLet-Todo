@@ -20,6 +20,7 @@ public partial class IslandWindow : Window
     private readonly IslandViewModel model = new();
     private readonly NotificationService notifications;
     private readonly Func<bool> systemAnimationsEnabled;
+    private readonly Func<bool>? pointerOutsideOverride;
     private HwndSource? source;
     private readonly IslandMotion motion;
     private IslandPage displayedPage = IslandPage.Tasks;
@@ -30,6 +31,9 @@ public partial class IslandWindow : Window
     private bool hiddenForFullscreen;
     private AttachmentService? attachmentService;
     private bool exitApproved;
+    private bool trayExitRequested;
+    private bool imeComposing;
+    private int compositionGeneration;
     private int exitRequestGeneration;
     private ListBoxItem? dragHighlight;
     private DragTargetAdorner? dragAdorner;
@@ -40,13 +44,17 @@ public partial class IslandWindow : Window
 
     public IslandWindow(NotificationService notifications) : this(notifications, static () => SystemParameters.ClientAreaAnimation) { }
 
-    internal IslandWindow(NotificationService notifications, Func<bool> systemAnimationsEnabled)
+    internal IslandWindow(NotificationService notifications, Func<bool> systemAnimationsEnabled, Func<bool>? pointerOutsideOverride = null)
     {
         this.systemAnimationsEnabled = systemAnimationsEnabled;
+        this.pointerOutsideOverride = pointerOutsideOverride;
         InitializeComponent();
         motion = new IslandMotion(this, IslandSurface, IslandClip, HeaderOffset, ContentPanel, ContentOffset, PositionWindow);
         this.notifications = notifications;
         DataContext = model;
+        TitleInput.AddHandler(TextCompositionManager.PreviewTextInputStartEvent, new TextCompositionEventHandler((_, _) => StartComposition()), true);
+        TitleInput.AddHandler(TextCompositionManager.PreviewTextInputUpdateEvent, new TextCompositionEventHandler((_, _) => StartComposition()), true);
+        TitleInput.AddHandler(TextCompositionManager.PreviewTextInputEvent, new TextCompositionEventHandler((_, _) => FinishComposition()), true);
         model.NavigationRequested += page => Navigate(page, true);
         model.FeedbackRequested += PlayFeedbackAsync;
         dragTracker.Tick += (_, _) =>
@@ -100,7 +108,12 @@ public partial class IslandWindow : Window
 
     public Task AttachTasksAsync(TaskService service) => model.AttachAsync(service);
     public void AttachAttachments(AttachmentService service) { attachmentService = service; model.AttachAttachmentService(service); }
-    public void RequestExit() => Close();
+    public void RequestExit()
+    {
+        trayExitRequested = true;
+        try { Close(); }
+        finally { trayExitRequested = false; }
+    }
     private async void OnWaitCopyExit(object sender, RoutedEventArgs e)
     { var request = exitRequestGeneration; if (attachmentService is not null) await attachmentService.WaitForIdleAsync(); FinishCopyExit(request); }
     private async void OnCancelCopyExit(object sender, RoutedEventArgs e)
@@ -124,7 +137,19 @@ public partial class IslandWindow : Window
         dragHighlight = row; dragLayer = AdornerLayer.GetAdornerLayer(row);
         if (dragLayer is not null) { dragAdorner = new DragTargetAdorner(row); dragLayer.Add(dragAdorner); }
     }
-    private bool CursorOutsideIsland() => GetCursorPos(out var position) && !motion.Contains(PointFromScreen(new Point(position.X, position.Y)));
+    private bool CursorOutsideIsland() => pointerOutsideOverride?.Invoke() ?? (GetCursorPos(out var position) && !motion.Contains(PointFromScreen(new Point(position.X, position.Y))));
+    private void StartComposition() { imeComposing = true; compositionGeneration++; }
+    private void FinishComposition()
+    {
+        if (!imeComposing) return;
+        var generation = compositionGeneration;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (generation != compositionGeneration) return;
+            imeComposing = false;
+            if (CursorOutsideIsland()) CollapseToTasks();
+        }, DispatcherPriority.ContextIdle);
+    }
     private void CollapseToTasks()
     {
         if (state.Page == IslandPage.Collapsed) return;
@@ -241,6 +266,7 @@ public partial class IslandWindow : Window
     private void OnPointerEnter(object sender, MouseEventArgs e) { if (state.Page == IslandPage.Collapsed) { state.ExpandAfterPointerEnter(); RenderState(); } }
     private void OnPointerLeave(object sender, MouseEventArgs e)
     {
+        if (imeComposing || !CursorOutsideIsland()) return;
         if (dragTracker.IsEnabled) { if (CursorOutsideIsland()) EndExternalDrag(); return; }
         CollapseToTasks();
     }
@@ -249,7 +275,7 @@ public partial class IslandWindow : Window
     private void OnPageTabClick(object sender, RoutedEventArgs e) => SelectPeerPage(sender);
     private void SelectPeerPage(object sender)
     {
-        if (state.Page == IslandPage.Collapsed || dragTracker.IsEnabled) return;
+        if (state.Page == IslandPage.Collapsed || dragTracker.IsEnabled || imeComposing) return;
         var page = ReferenceEquals(sender, ArchiveTab) ? IslandPage.Archive
             : ReferenceEquals(sender, SettingsTab) ? IslandPage.Settings : IslandPage.Tasks;
         if (state.Page == page) return;
@@ -279,6 +305,7 @@ public partial class IslandWindow : Window
     }
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
+        if (imeComposing) return; // IME owns Escape while choosing or cancelling composition.
         if (e.Key != Key.Escape) return;
         if (model.ConfirmDelete) { model.CancelDeleteCommand.Execute(null); e.Handled = true; return; }
         if (state.Page == IslandPage.Editor) { if (model.HasUnsavedChanges) BackButton.Activate(); else model.LeaveEditorCommand.Execute(null); e.Handled = true; return; }
@@ -347,6 +374,8 @@ public partial class IslandWindow : Window
     }
     private nint WindowMessages(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
+        if (message == 0x010D) StartComposition(); // WM_IME_STARTCOMPOSITION
+        if (message == 0x010E) FinishComposition(); // Includes cancellation with no committed text.
         if (message is 0x02E0 or 0x001A or 0x007E) Dispatcher.BeginInvoke(RefreshViewport);
         if (message == 0x0084) // Alpha-zero layered pixels handle cross-process margins; this assists same-thread hit testing.
         {
@@ -356,7 +385,7 @@ public partial class IslandWindow : Window
         }
         // Hover-expanded windows should not become active merely when Windows asks about mouse activation.
         if (message == 0x0021) { handled = true; return 3; } // MA_NOACTIVATE; buttons explicitly activate on click.
-        if (message == 0x0010) { handled = true; CollapseToTasks(); return 0; } // Shell/Alt+F4 close keeps the tray resident. Tray exit calls RequestExit.
+        if (message == 0x0010 && !trayExitRequested && !exitApproved) { handled = true; CollapseToTasks(); return 0; } // Only unsolicited shell/Alt+F4 close keeps the tray resident.
         return 0;
     }
     private void RefreshViewport()

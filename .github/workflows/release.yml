@@ -30,3 +30,10 @@ jobs:
           $packages = @(Get-ChildItem artifacts/release -File | ForEach-Object FullName)
           gh release create $env:GITHUB_REF_NAME @packages --verify-tag --prerelease --title "IsLet-Todo $env:GITHUB_REF_NAME" --notes-file docs/PREVIEW-RELEASE.md
           if ($LASTEXITCODE) { throw 'Preview release upload failed' }
+          if ($env:GITHUB_REF_NAME -eq 'v0.4.0-preview.3') {
+            gh release view v0.4.0-preview.2 *> $null
+            if ($LASTEXITCODE -eq 0) {
+              gh release delete v0.4.0-preview.2 --yes
+              if ($LASTEXITCODE) { throw 'Could not withdraw preview.2 with the known tray-exit defect' }
+            }
+          }

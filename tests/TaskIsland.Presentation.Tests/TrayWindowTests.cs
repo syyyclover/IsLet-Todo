@@ -4,6 +4,15 @@ using Xunit;
 
 public class TrayWindowTests
 {
+    [Fact] public void ExplicitTrayExitClosesWindowInsteadOfBeingIntercepted() => IslandMotionTests.RunSta(window =>
+    {
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        window.RequestExit();
+        IslandMotionTests.Pump(100);
+        Assert.True(closed, "Tray exit must bypass the shell-close interception");
+    });
+
     [Fact] public void NativeWindowUsesToolWindowStyleWithoutAppWindowStyle() => IslandMotionTests.RunSta(window =>
     {
         var style = GetWindowLongPtr(new WindowInteropHelper(window).Handle, -20).ToInt64();

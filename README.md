@@ -4,15 +4,15 @@
 
 ## 下载与版本
 
-**当前交付修订：0.4.0-preview.2（2026-10-29），Windows 11 x64。**
+**当前交付修订：0.4.0-preview.3（2026-10-30），Windows 11 x64。**
 
 GitHub 下载正在修复发布流程，确认附件上传后补充直达链接。本地交付文件位于 `artifacts/release/`：
 
-- `IsLet-Todo-0.4.0-preview.2-setup-x64.exe`：安装版，普通用户权限，无需管理员。
-- `IsLet-Todo-0.4.0-preview.2-portable-x64.zip`：便携版，解压后运行 `TaskIsland.exe`。
+- `IsLet-Todo-0.4.0-preview.3-setup-x64.exe`：安装版，普通用户权限，无需管理员。
+- `IsLet-Todo-0.4.0-preview.3-portable-x64.zip`：便携版，解压后运行 `TaskIsland.exe`。
 - `SHA256SUMS.txt`：对应本版本两个下载文件的校验值。
 
-0.4.0-preview.2 修正发布流程、版本校验与说明文档，保留已验证的托盘及岛内交互。软件仍为预览版，尚未完成全部 Windows 和性能验收。
+0.4.0-preview.3 修复中文输入法误收起与托盘退出失败，并修正发布流程、版本校验与说明文档，保留已验证的托盘及岛内交互。软件仍为预览版，尚未完成全部 Windows 和性能验收。
 
 ## 已实现
 

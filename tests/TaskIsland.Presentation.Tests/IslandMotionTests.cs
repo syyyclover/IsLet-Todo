@@ -183,7 +183,7 @@ public class IslandMotionTests(ITestOutputHelper output)
         Assert.Equal(Visibility.Hidden, ((FrameworkElement)window.FindName("ContentPanel")).Visibility);
     }, systemAnimationsEnabled: false);
 
-    internal static void RunSta(Action<IslandWindow> check, bool systemAnimationsEnabled = true)
+    internal static void RunSta(Action<IslandWindow> check, bool systemAnimationsEnabled = true, bool pointerOutside = true)
     {
         Exception? failure = null;
         var thread = new Thread(() =>
@@ -193,7 +193,7 @@ public class IslandMotionTests(ITestOutputHelper output)
             {
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
                 // Exercise each animation policy explicitly without changing the desktop's OS settings.
-                window = new IslandWindow(new NotificationService(), () => systemAnimationsEnabled);
+                window = new IslandWindow(new NotificationService(), () => systemAnimationsEnabled, () => pointerOutside);
                 window.Show();
                 // Native pointer traffic from the user's desktop must not reverse synthetic test motions.
                 // Explicit routed events and native close/style tests remain available below.
