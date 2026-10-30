@@ -6,10 +6,10 @@
 
 **当前交付修订：0.4.0-preview.3（2026-10-30），Windows 11 x64。**
 
-GitHub 下载正在修复发布流程，确认附件上传后补充直达链接。本地交付文件位于 `artifacts/release/`：
+[GitHub 下载页面](https://github.com/syyyclover/IsLet-Todo/releases/tag/v0.4.0-preview.3-build.3)（已发布）。本地交付文件位于 `artifacts/release/`：
 
-- `IsLet-Todo-0.4.0-preview.3-setup-x64.exe`：安装版，普通用户权限，无需管理员。
-- `IsLet-Todo-0.4.0-preview.3-portable-x64.zip`：便携版，解压后运行 `TaskIsland.exe`。
+- [安装包](https://github.com/syyyclover/IsLet-Todo/releases/download/v0.4.0-preview.3-build.3/IsLet-Todo-0.4.0-preview.3-setup-x64.exe)：安装版，普通用户权限，无需管理员。
+- [便携包](https://github.com/syyyclover/IsLet-Todo/releases/download/v0.4.0-preview.3-build.3/IsLet-Todo-0.4.0-preview.3-portable-x64.zip)：便携版，解压后运行 `TaskIsland.exe`。
 - `SHA256SUMS.txt`：对应本版本两个下载文件的校验值。
 
 0.4.0-preview.3 修复中文输入法误收起与托盘退出失败，并修正发布流程、版本校验与说明文档，保留已验证的托盘及岛内交互。软件仍为预览版，尚未完成全部 Windows 和性能验收。
@@ -47,7 +47,7 @@ GitHub 下载正在修复发布流程，确认附件上传后补充直达链接�
 
 ## 验证范围
 
-已由用户验证：通知出现与点击定位、附件添加与打开、拖动移出收起、悬停切页与草稿继续、托盘常驻与菜单。上轮本机 Release 196 项自动化测试通过；本次远程发布验证结果见 [交付修订记录](docs/validation/DELIVERY-2026-10-29.md)。
+已由用户验证：中文输入法候选交互、托盘正常退出、通知出现与点击定位、附件添加与打开、拖动移出收起、悬停切页与草稿继续、托盘常驻与菜单。本轮本机 Release 202 项自动化测试通过，GitHub 发布构建通过；本次远程发布验证结果见 [交付修订记录](docs/validation/DELIVERY-2026-10-29.md)。
 
 仍待完成：完整安装卸载矩阵、干净 Windows 运行、多 DPI/多显示器/全屏/Explorer 重启、完整附件异常矩阵及 8 小时运行。程序展开目录约 206 MiB，仍超过 200 MiB 目标；安装包尚未签名。
 
